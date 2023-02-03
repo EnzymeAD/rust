@@ -69,6 +69,7 @@ pub fn compile_codegen_unit(tcx: TyCtxt<'_>, cgu_name: Symbol) -> (ModuleCodegen
         Some(dep_graph::hash_result),
         );
     let time_to_codegen = start_time.elapsed();
+    dbg!("compile_codegen_unit");
 
     // We assume that the cost to run LLVM on a CGU is proportional to
     // the time we needed for codegenning it.
@@ -82,7 +83,7 @@ pub fn compile_codegen_unit(tcx: TyCtxt<'_>, cgu_name: Symbol) -> (ModuleCodegen
             );
         // Instantiate monomorphizations without filling out definitions yet...
         let mut llvm_module = ModuleLlvm::new(tcx, cgu_name.as_str());
-        let typetrees = {
+        let (target_fncs, typetrees) = {
             let cx = CodegenCx::new(tcx, cgu, &llvm_module);
 
             let mono_items = cx.codegen_unit.items_in_deterministic_order(cx.tcx);
@@ -130,9 +131,18 @@ pub fn compile_codegen_unit(tcx: TyCtxt<'_>, cgu_name: Symbol) -> (ModuleCodegen
                 cx.debuginfo_finalize();
             }
 
+            let targets: Vec<String> = mono_items.iter()
+                .filter(|(mono_item, _)| mono_item.def_id().map(|x| tcx.autodiff_attrs(x).apply_autodiff()).unwrap_or(false))
+                .filter_map(|(mono_item, _)| {
+                    let symbol = mono_item.symbol_name(cx.tcx).to_string();
+                    Some(symbol)
+                }).collect();
+
+
             // find autodiff items and build typetrees for them
-            mono_items.iter()
+            let tt = mono_items.iter()
                 .filter(|(mono_item, _)| mono_item.def_id().map(|x| tcx.autodiff_attrs(x).is_active()).unwrap_or(false))
+                //.filter(|(mono_item, _)| mono_item.def_id().map(|x| tcx.autodiff_attrs(x).is_source()).unwrap_or(false))
                 .filter_map(|(mono_item, _)| {
                     let symbol = mono_item.symbol_name(cx.tcx).to_string();
                     match mono_item {
@@ -140,15 +150,17 @@ pub fn compile_codegen_unit(tcx: TyCtxt<'_>, cgu_name: Symbol) -> (ModuleCodegen
                             let ty = instance.ty(tcx, ParamEnv::empty());
 
                             Some((
-                                symbol,
-                                unsafe { parse_typetree(tcx, ty, &llvm_module) }
-                            ))
+                                    symbol,
+                                    unsafe { parse_typetree(tcx, ty, &llvm_module) }
+                                 ))
                         },
                         _ => None
                     }
-                }).collect()
+                }).collect();
+            (targets, tt)
         };
 
+        llvm_module.target_fncs = target_fncs;
         llvm_module.typetrees = typetrees;
 
         ModuleCodegen {
@@ -163,14 +175,14 @@ pub fn compile_codegen_unit(tcx: TyCtxt<'_>, cgu_name: Symbol) -> (ModuleCodegen
 
 unsafe fn parse_typetree<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, llvm_module: &ModuleLlvm) -> DiffTypeTree {
     let fnc_binder: ty::Binder<'_, ty::FnSig<'_>> = fn_ty.fn_sig(tcx);
-    
+
     // TODO: verify.
     // I think we don't need lifetimes here, so skip_binder is valid?
     // let tmp = fnc_binder.no_bound_vars();
     // assert!(tmp.is_some());
     // let x: ty::FnSig<'_> = tmp.unwrap();
     let x: ty::FnSig<'_> = fnc_binder.skip_binder();
-    
+
     let output: Ty<'_> = x.output();
     let inputs: &[Ty<'_>] = x.inputs();
     let llvm_data_layout = llvm::LLVMGetDataLayoutStr(&*llvm_module.llmod_raw);

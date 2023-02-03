@@ -53,7 +53,7 @@ fn inline_attr<'ll>(cx: &CodegenCx<'ll, '_>, inline: InlineAttr) -> Option<&'ll 
 pub fn sanitize_attrs<'ll>(
     cx: &CodegenCx<'ll, '_>,
     no_sanitize: SanitizerSet,
-) -> SmallVec<[&'ll Attribute; 4]> {
+    ) -> SmallVec<[&'ll Attribute; 4]> {
     let mut attrs = SmallVec::new();
     let enabled = cx.tcx.sess.opts.debugging_opts.sanitizer - no_sanitize;
     if enabled.contains(SanitizerSet::ADDRESS) {
@@ -119,10 +119,10 @@ fn instrument_function_attr<'ll>(cx: &CodegenCx<'ll, '_>) -> Option<&'ll Attribu
         let mcount_name = cx.sess().target.mcount.as_ref();
 
         Some(llvm::CreateAttrStringValue(
-            cx.llcx,
-            "instrument-function-entry-inlined",
-            &mcount_name,
-        ))
+                cx.llcx,
+                "instrument-function-entry-inlined",
+                &mcount_name,
+                ))
     } else {
         None
     }
@@ -134,13 +134,13 @@ fn probestack_attr<'ll>(cx: &CodegenCx<'ll, '_>) -> Option<&'ll Attribute> {
     // stack overflow anyway so we don't really need stack probes regardless.
     if cx
         .sess()
-        .opts
-        .debugging_opts
-        .sanitizer
-        .intersects(SanitizerSet::ADDRESS | SanitizerSet::THREAD)
-    {
-        return None;
-    }
+            .opts
+            .debugging_opts
+            .sanitizer
+            .intersects(SanitizerSet::ADDRESS | SanitizerSet::THREAD)
+            {
+                return None;
+            }
 
     // probestack doesn't play nice either with `-C profile-generate`.
     if cx.sess().opts.cg.profile_generate.enabled() {
@@ -208,7 +208,7 @@ pub fn non_lazy_bind_attr<'ll>(cx: &CodegenCx<'ll, '_>) -> Option<&'ll Attribute
 #[inline]
 pub(crate) fn default_optimisation_attrs<'ll>(
     cx: &CodegenCx<'ll, '_>,
-) -> SmallVec<[&'ll Attribute; 2]> {
+    ) -> SmallVec<[&'ll Attribute; 2]> {
     let mut attrs = SmallVec::new();
     match cx.sess().opts.optimize {
         OptLevel::Size => {
@@ -229,9 +229,9 @@ pub fn from_fn_attrs<'ll, 'tcx>(
     cx: &CodegenCx<'ll, 'tcx>,
     llfn: &'ll Value,
     instance: ty::Instance<'tcx>,
-) {
+    ) {
     let codegen_fn_attrs = cx.tcx.codegen_fn_attrs(instance.def_id());
-    let autodiff_attrs = cx.tcx.autodiff_attrs(instance.def_id());
+    let _autodiff_attrs = cx.tcx.autodiff_attrs(instance.def_id());
 
     let mut to_add = SmallVec::<[_; 16]>::new();
 
@@ -246,7 +246,7 @@ pub fn from_fn_attrs<'ll, 'tcx>(
         OptimizeAttr::Speed => {}
     }
 
-    let inline = if codegen_fn_attrs.flags.contains(CodegenFnAttrFlags::NAKED) || autodiff_attrs.is_active() {
+    let inline = if codegen_fn_attrs.flags.contains(CodegenFnAttrFlags::NAKED) {
         InlineAttr::Never
     } else if codegen_fn_attrs.inline == InlineAttr::None && instance.def.requires_inline(cx.tcx) {
         InlineAttr::Hint
@@ -327,7 +327,7 @@ pub fn from_fn_attrs<'ll, 'tcx>(
     if let Some(f) = llvm_util::check_tied_features(
         cx.tcx.sess,
         &function_features.iter().map(|f| (*f, true)).collect(),
-    ) {
+        ) {
         let span = cx
             .tcx
             .get_attrs(instance.def_id())
@@ -337,7 +337,7 @@ pub fn from_fn_attrs<'ll, 'tcx>(
         let msg = format!(
             "the target features {} must all be either enabled or disabled together",
             f.join(", ")
-        );
+            );
         let mut err = cx.tcx.sess.struct_span_err(span, &msg);
         err.help("add the missing features in a `target_feature` attribute");
         err.emit();
@@ -349,11 +349,11 @@ pub fn from_fn_attrs<'ll, 'tcx>(
         .flat_map(|feat| {
             llvm_util::to_llvm_features(cx.tcx.sess, feat).into_iter().map(|f| format!("+{}", f))
         })
-        .chain(codegen_fn_attrs.instruction_set.iter().map(|x| match x {
-            InstructionSetAttr::ArmA32 => "-thumb-mode".to_string(),
-            InstructionSetAttr::ArmT32 => "+thumb-mode".to_string(),
-        }))
-        .collect::<Vec<String>>();
+    .chain(codegen_fn_attrs.instruction_set.iter().map(|x| match x {
+        InstructionSetAttr::ArmA32 => "-thumb-mode".to_string(),
+        InstructionSetAttr::ArmT32 => "+thumb-mode".to_string(),
+    }))
+    .collect::<Vec<String>>();
 
     if cx.tcx.sess.target.is_like_wasm {
         // If this function is an import from the environment but the wasm

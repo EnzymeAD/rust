@@ -529,6 +529,7 @@ pub struct ModuleLlvm {
     llmod_raw: *const llvm::Module,
     tm: &'static mut llvm::TargetMachine,
     typetrees: FxHashMap<String, DiffTypeTree>,
+    target_fncs: Vec<String>,
 }
 
 unsafe impl Send for ModuleLlvm {}
@@ -539,7 +540,7 @@ impl ModuleLlvm {
         unsafe {
             let llcx = llvm::LLVMRustContextCreate(tcx.sess.fewer_names());
             let llmod_raw = context::create_module(tcx, llcx, mod_name) as *const _;
-            ModuleLlvm { llmod_raw, llcx, tm: create_target_machine(tcx, mod_name), typetrees: Default::default(), }
+            ModuleLlvm { llmod_raw, llcx, tm: create_target_machine(tcx, mod_name), typetrees: Default::default(), target_fncs: vec![] }
         }
     }
 
@@ -547,7 +548,7 @@ impl ModuleLlvm {
         unsafe {
             let llcx = llvm::LLVMRustContextCreate(tcx.sess.fewer_names());
             let llmod_raw = context::create_module(tcx, llcx, mod_name) as *const _;
-            ModuleLlvm { llmod_raw, llcx, tm: create_informational_target_machine(tcx.sess) , typetrees: Default::default() }
+            ModuleLlvm { llmod_raw, llcx, tm: create_informational_target_machine(tcx.sess) , typetrees: Default::default(), target_fncs: vec![] }
         }
     }
 
@@ -570,7 +571,7 @@ impl ModuleLlvm {
             };
 
 
-            Ok(ModuleLlvm { llmod_raw, llcx, tm, typetrees: Default::default() })
+            Ok(ModuleLlvm { llmod_raw, llcx, tm, typetrees: Default::default(), target_fncs: vec![] })
         }
     }
 

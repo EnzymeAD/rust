@@ -225,7 +225,7 @@ fn fat_lto(
                 _ => None
             }
         })
-        .flatten()
+    .flatten()
         .collect();
 
     // Sort out all our lists of incoming modules into two lists.
@@ -756,7 +756,7 @@ pub unsafe fn optimize_thin_module(
     let llcx = llvm::LLVMRustContextCreate(cgcx.fewer_names);
     let llmod_raw = parse_module(llcx, module_name, thin_module.data(), &diag_handler)? as *const _;
     let module = ModuleCodegen {
-        module_llvm: ModuleLlvm { llmod_raw, llcx, tm, typetrees: Default::default() },
+        module_llvm: ModuleLlvm { llmod_raw, llcx, tm, typetrees: Default::default(), target_fncs: vec![] },
         name: thin_module.name().to_string(),
         kind: ModuleKind::Regular,
     };
