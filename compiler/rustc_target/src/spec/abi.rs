@@ -38,6 +38,7 @@ pub enum Abi {
     PlatformIntrinsic,
     Unadjusted,
     RustCold,
+    Autodiff,
 }
 
 impl Abi {
