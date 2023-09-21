@@ -672,7 +672,12 @@ pub(crate) unsafe fn enzyme_ad(
     let type_analysis: EnzymeTypeAnalysisRef =
         CreateTypeAnalysis(logic_ref, std::ptr::null_mut(), std::ptr::null_mut(), 0);
 
-    llvm::EnzymeSetCLBool(std::ptr::addr_of_mut!(llvm::EnzymeStrictAliasing), 0);
+
+    if std::env::var("ENZYME_STRICT_ALIASING").is_ok() {
+      llvm::EnzymeSetCLBool(std::ptr::addr_of_mut!(llvm::EnzymeStrictAliasing), 1);
+    } else {
+      llvm::EnzymeSetCLBool(std::ptr::addr_of_mut!(llvm::EnzymeStrictAliasing), 0);
+    }
     if std::env::var("ENZYME_PRINT_TA").is_ok() {
       llvm::EnzymeSetCLBool(std::ptr::addr_of_mut!(llvm::EnzymePrintType), 1);
     }
@@ -743,8 +748,6 @@ pub(crate) unsafe fn differentiate(
         llvm::EnzymeSetCLBool(std::ptr::addr_of_mut!(llvm::EnzymePrintType), 1);
         llvm::EnzymeSetCLBool(std::ptr::addr_of_mut!(llvm::EnzymePrint), 1);
     }
-
-    llvm::EnzymeSetCLBool(std::ptr::addr_of_mut!(llvm::EnzymeStrictAliasing), 0);
 
     if std::env::var("ENZYME_PRINT_MOD").is_ok() {
         unsafe {LLVMDumpModule(llmod);}
