@@ -70,13 +70,20 @@ impl<'tcx> Partition<'tcx> for DefaultPartitioning {
                 .or_insert_with(|| CodegenUnit::new(codegen_unit_name));
 
             let mut can_be_internalized = true;
+
             let (linkage, visibility) = mono_item_linkage_and_visibility(
                 cx.tcx,
                 &mono_item,
                 &mut can_be_internalized,
                 export_generics,
             );
-            if visibility == Visibility::Hidden && can_be_internalized {
+
+            //dbg!(&characteristic_def_id);
+            let autodiff_active = characteristic_def_id
+                .map(|x| cx.tcx.autodiff_attrs(x).is_active())
+                .unwrap_or(false);
+
+            if !autodiff_active && visibility == Visibility::Hidden && can_be_internalized {
                 internalization_candidates.insert(mono_item);
             }
 

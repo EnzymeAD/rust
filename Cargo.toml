@@ -57,6 +57,7 @@ exclude = [
   "src/tools/x",
   # stdarch has its own Cargo workspace
   "library/stdarch",
+  "library/autodiff",
 ]
 
 [profile.release.package.compiler_builtins]

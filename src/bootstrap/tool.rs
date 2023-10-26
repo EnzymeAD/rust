@@ -215,68 +215,68 @@ macro_rules! bootstrap_tool {
         pub enum Tool {
             $(
                 $name,
-            )+
+                )+
         }
 
         impl<'a> Builder<'a> {
             pub fn tool_exe(&self, tool: Tool) -> PathBuf {
                 match tool {
                     $(Tool::$name =>
-                        self.ensure($name {
-                            compiler: self.compiler(0, self.config.build),
-                            target: self.config.build,
-                        }),
-                    )+
+                      self.ensure($name {
+                          compiler: self.compiler(0, self.config.build),
+                          target: self.config.build,
+                      }),
+                      )+
                 }
             }
         }
 
         $(
             #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-        pub struct $name {
-            pub compiler: Compiler,
-            pub target: TargetSelection,
-        }
-
-        impl Step for $name {
-            type Output = PathBuf;
-
-            fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
-                run.path($path)
+            pub struct $name {
+                pub compiler: Compiler,
+                pub target: TargetSelection,
             }
 
-            fn make_run(run: RunConfig<'_>) {
-                run.builder.ensure($name {
-                    // snapshot compiler
-                    compiler: run.builder.compiler(0, run.builder.config.build),
-                    target: run.target,
-                });
-            }
+            impl Step for $name {
+                type Output = PathBuf;
 
-            fn run(self, builder: &Builder<'_>) -> PathBuf {
-                builder.ensure(ToolBuild {
-                    compiler: self.compiler,
-                    target: self.target,
-                    tool: $tool_name,
-                    mode: if false $(|| $unstable)* {
-                        // use in-tree libraries for unstable features
-                        Mode::ToolStd
-                    } else {
-                        Mode::ToolBootstrap
-                    },
-                    path: $path,
-                    is_optional_tool: false,
-                    source_type: if false $(|| $external)* {
-                        SourceType::Submodule
-                    } else {
-                        SourceType::InTree
-                    },
-                    extra_features: vec![],
-                    allow_features: concat!($($allow_features)*),
-                }).expect("expected to build -- essential tool")
+                fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
+                    run.path($path)
+                }
+
+                fn make_run(run: RunConfig<'_>) {
+                    run.builder.ensure($name {
+                        // snapshot compiler
+                        compiler: run.builder.compiler(0, run.builder.config.build),
+                        target: run.target,
+                    });
+                }
+
+                fn run(self, builder: &Builder<'_>) -> PathBuf {
+                    builder.ensure(ToolBuild {
+                        compiler: self.compiler,
+                        target: self.target,
+                        tool: $tool_name,
+                        mode: if false $(|| $unstable)* {
+                            // use in-tree libraries for unstable features
+                            Mode::ToolStd
+                        } else {
+                            Mode::ToolBootstrap
+                        },
+                        path: $path,
+                        is_optional_tool: false,
+                        source_type: if false $(|| $external)* {
+                            SourceType::Submodule
+                        } else {
+                            SourceType::InTree
+                        },
+                        extra_features: vec![],
+                        allow_features: concat!($($allow_features)*),
+                    }).expect("expected to build -- essential tool")
+                }
             }
-        }
-        )+
+            )+
     }
 }
 
@@ -738,21 +738,21 @@ macro_rules! tool_extended {
        ;)+) => {
         $(
             #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-        pub struct $name {
-            pub compiler: Compiler,
-            pub target: TargetSelection,
-            pub extra_features: Vec<String>,
-        }
+            pub struct $name {
+                pub compiler: Compiler,
+                pub target: TargetSelection,
+                pub extra_features: Vec<String>,
+            }
 
-        impl Step for $name {
-            type Output = Option<PathBuf>;
-            const DEFAULT: bool = true; // Overwritten below
-            const ONLY_HOSTS: bool = true;
+            impl Step for $name {
+                type Output = Option<PathBuf>;
+                const DEFAULT: bool = true; // Overwritten below
+                const ONLY_HOSTS: bool = true;
 
-            fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
-                let builder = run.builder;
-                run.path($path).default_condition(
-                    builder.config.extended
+                fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
+                    let builder = run.builder;
+                    run.path($path).default_condition(
+                        builder.config.extended
                         && builder.config.tools.as_ref().map_or(
                             // By default, on nightly/dev enable all tools, else only
                             // build stable tools.
@@ -762,55 +762,55 @@ macro_rules! tool_extended {
                                 tools.iter().any(|tool| match tool.as_ref() {
                                     "clippy" => $tool_name == "clippy-driver",
                                     x => $tool_name == x,
-                            })
-                        }),
-                )
-            }
+                                })
+                            }),
+                            )
+                }
 
-            fn make_run(run: RunConfig<'_>) {
-                run.builder.ensure($name {
-                    compiler: run.builder.compiler(run.builder.top_stage, run.builder.config.build),
-                    target: run.target,
-                    extra_features: Vec::new(),
-                });
-            }
+                fn make_run(run: RunConfig<'_>) {
+                    run.builder.ensure($name {
+                        compiler: run.builder.compiler(run.builder.top_stage, run.builder.config.build),
+                        target: run.target,
+                        extra_features: Vec::new(),
+                    });
+                }
 
-            #[allow(unused_mut)]
-            fn run(mut $sel, $builder: &Builder<'_>) -> Option<PathBuf> {
-                let tool = $builder.ensure(ToolBuild {
-                    compiler: $sel.compiler,
-                    target: $sel.target,
-                    tool: $tool_name,
-                    mode: if false $(|| $tool_std)? { Mode::ToolStd } else { Mode::ToolRustc },
-                    path: $path,
-                    extra_features: $sel.extra_features,
-                    is_optional_tool: true,
-                    source_type: SourceType::InTree,
-                    allow_features: concat!($($allow_features)*),
-                })?;
+                #[allow(unused_mut)]
+                fn run(mut $sel, $builder: &Builder<'_>) -> Option<PathBuf> {
+                    let tool = $builder.ensure(ToolBuild {
+                        compiler: $sel.compiler,
+                        target: $sel.target,
+                        tool: $tool_name,
+                        mode: if false $(|| $tool_std)? { Mode::ToolStd } else { Mode::ToolRustc },
+                        path: $path,
+                        extra_features: $sel.extra_features,
+                        is_optional_tool: true,
+                        source_type: SourceType::InTree,
+                        allow_features: concat!($($allow_features)*),
+                    })?;
 
-                if (false $(|| !$add_bins_to_sysroot.is_empty())?) && $sel.compiler.stage > 0 {
-                    let bindir = $builder.sysroot($sel.compiler).join("bin");
-                    t!(fs::create_dir_all(&bindir));
+                    if (false $(|| !$add_bins_to_sysroot.is_empty())?) && $sel.compiler.stage > 0 {
+                        let bindir = $builder.sysroot($sel.compiler).join("bin");
+                        t!(fs::create_dir_all(&bindir));
 
-                    #[allow(unused_variables)]
-                    let tools_out = $builder
-                        .cargo_out($sel.compiler, Mode::ToolRustc, $sel.target);
+                        #[allow(unused_variables)]
+                        let tools_out = $builder
+                            .cargo_out($sel.compiler, Mode::ToolRustc, $sel.target);
 
-                    $(for add_bin in $add_bins_to_sysroot {
-                        let bin_source = tools_out.join(exe(add_bin, $sel.target));
-                        let bin_destination = bindir.join(exe(add_bin, $sel.compiler.host));
-                        $builder.copy(&bin_source, &bin_destination);
-                    })?
+                        $(for add_bin in $add_bins_to_sysroot {
+                            let bin_source = tools_out.join(exe(add_bin, $sel.target));
+                            let bin_destination = bindir.join(exe(add_bin, $sel.compiler.host));
+                            $builder.copy(&bin_source, &bin_destination);
+                        })?
 
-                    let tool = bindir.join(exe($tool_name, $sel.compiler.host));
-                    Some(tool)
-                } else {
-                    Some(tool)
+                        let tool = bindir.join(exe($tool_name, $sel.compiler.host));
+                        Some(tool)
+                    } else {
+                        Some(tool)
+                    }
                 }
             }
-        }
-        )+
+            )+
     }
 }
 

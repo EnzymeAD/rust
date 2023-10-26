@@ -1,3 +1,4 @@
+pub mod autodiff_attrs;
 pub mod codegen_fn_attrs;
 pub mod dependency_format;
 pub mod exported_symbols;
@@ -31,6 +32,7 @@ pub mod privacy;
 pub mod region;
 pub mod resolve_bound_vars;
 pub mod stability;
+pub mod typetree;
 
 pub fn provide(providers: &mut crate::ty::query::Providers) {
     limits::provide(providers);

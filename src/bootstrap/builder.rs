@@ -1353,7 +1353,7 @@ impl<'a> Builder<'a> {
                 }).unwrap_or_else(|_| {
                     eprintln!(
                         "error: `x.py clippy` requires a host `rustc` toolchain with the `clippy` component"
-                    );
+                        );
                     eprintln!("help: try `rustup component add clippy`");
                     crate::detail_exit(1);
                 });
@@ -1364,6 +1364,11 @@ impl<'a> Builder<'a> {
                 rustflags.arg("--cfg=bootstrap");
             }
         }
+
+        // TODO: adjust -14 ending for Enzyme
+        // https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/.E2.9C.94.20link.20new.20library.20into.20stage1.2Frustc
+        rustflags.arg("-l");
+        rustflags.arg("LLVMEnzyme-16");
 
         let use_new_symbol_mangling = match self.config.rust_new_symbol_mangling {
             Some(setting) => {

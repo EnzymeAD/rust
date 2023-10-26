@@ -25,6 +25,7 @@ use rustc_incremental::{
 };
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
+use rustc_middle::middle::autodiff_attrs::AutoDiffItem;
 use rustc_middle::middle::exported_symbols::SymbolExportInfo;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::cgu_reuse_tracker::CguReuseTracker;
@@ -118,6 +119,7 @@ pub struct ModuleConfig {
     pub inline_threshold: Option<u32>,
     pub emit_lifetime_markers: bool,
     pub llvm_plugins: Vec<String>,
+    pub enzyme_print_activity: bool,
 }
 
 impl ModuleConfig {
@@ -194,6 +196,7 @@ impl ModuleConfig {
                 false
             ),
 
+            enzyme_print_activity: sess.opts.unstable_opts.enzyme_print_activity,
             sanitizer: if_regular!(sess.opts.unstable_opts.sanitizer, SanitizerSet::empty()),
             sanitizer_recover: if_regular!(
                 sess.opts.unstable_opts.sanitizer_recover,
@@ -376,8 +379,10 @@ impl<B: WriteBackendMethods> CodegenContext<B> {
     }
 }
 
-fn generate_lto_work<B: ExtraBackendMethods>(
-    cgcx: &CodegenContext<B>,
+fn generate_lto_work<'tcx, B: ExtraBackendMethods>(
+    cgcx: &'tcx CodegenContext<B>,
+    autodiff: Vec<AutoDiffItem>,
+    typetrees: FxHashMap<String, B::TypeTree>,
     needs_fat_lto: Vec<FatLTOInput<B>>,
     needs_thin_lto: Vec<(String, B::ThinBuffer)>,
     import_only_modules: Vec<(SerializedModule<B::ModuleBuffer>, WorkProduct)>,
@@ -386,8 +391,15 @@ fn generate_lto_work<B: ExtraBackendMethods>(
 
     let (lto_modules, copy_jobs) = if !needs_fat_lto.is_empty() {
         assert!(needs_thin_lto.is_empty());
-        let lto_module =
+
+        let mut lto_module =
             B::run_fat_lto(cgcx, needs_fat_lto, import_only_modules).unwrap_or_else(|e| e.raise());
+
+        if cgcx.lto == Lto::Fat {
+            let config = cgcx.config(ModuleKind::Regular);
+            lto_module = unsafe { lto_module.autodiff(cgcx, autodiff, typetrees, config).unwrap() };
+        }
+
         (vec![lto_module], vec![])
     } else {
         assert!(needs_fat_lto.is_empty());
@@ -968,6 +980,7 @@ pub enum Message<B: WriteBackendMethods> {
         module_data: SerializedModule<B::ModuleBuffer>,
         work_product: WorkProduct,
     },
+    AddAutoDiffItems(Vec<AutoDiffItem>),
     CodegenComplete,
     CodegenItem,
     CodegenAborted,
@@ -1251,6 +1264,8 @@ fn start_executing_work<B: ExtraBackendMethods>(
         let mut needs_link = Vec::new();
         let mut needs_fat_lto = Vec::new();
         let mut needs_thin_lto = Vec::new();
+        let mut autodiff_items = Vec::new();
+        let mut typetrees = FxHashMap::<String, B::TypeTree>::default();
         let mut lto_import_only_modules = Vec::new();
         let mut started_lto = false;
         let mut codegen_aborted = false;
@@ -1346,9 +1361,14 @@ fn start_executing_work<B: ExtraBackendMethods>(
                     let needs_thin_lto = mem::take(&mut needs_thin_lto);
                     let import_only_modules = mem::take(&mut lto_import_only_modules);
 
-                    for (work, cost) in
-                        generate_lto_work(&cgcx, needs_fat_lto, needs_thin_lto, import_only_modules)
-                    {
+                    for (work, cost) in generate_lto_work(
+                        &cgcx,
+                        autodiff_items.clone(),
+                        typetrees.clone(),
+                        needs_fat_lto,
+                        needs_thin_lto,
+                        import_only_modules,
+                    ) {
                         let insertion_index = work_items
                             .binary_search_by_key(&cost, |&(_, cost)| cost)
                             .unwrap_or_else(|e| e);
@@ -1452,13 +1472,24 @@ fn start_executing_work<B: ExtraBackendMethods>(
                         Err(e) => {
                             let msg = &format!("failed to acquire jobserver token: {}", e);
                             shared_emitter.fatal(msg);
+                            // Exit the coordinator thread
+                            //panic!("{}", msg)
                             codegen_done = true;
                             codegen_aborted = true;
                         }
                     }
                 }
 
-                Message::CodegenDone { llvm_work_item, cost } => {
+                Message::CodegenDone { mut llvm_work_item, cost } => {
+                    //// extract build typetrees
+                    match &mut llvm_work_item {
+                        WorkItem::Optimize(module) => {
+                            let tt = B::typetrees(&mut module.module_llvm);
+                            typetrees.extend(tt);
+                        }
+                        _ => {},
+                    }
+
                     // We keep the queue sorted by estimated processing cost,
                     // so that more expensive items are processed earlier. This
                     // is good for throughput as it gives the main thread more
@@ -1495,6 +1526,9 @@ fn start_executing_work<B: ExtraBackendMethods>(
                 Message::CodegenAborted => {
                     codegen_done = true;
                     codegen_aborted = true;
+                }
+                Message::AddAutoDiffItems(mut items) => {
+                    autodiff_items.append(&mut items);
                 }
                 Message::Done { result: Ok(compiled_module), worker_id } => {
                     free_worker(worker_id);
@@ -1895,7 +1929,7 @@ impl<B: ExtraBackendMethods> OngoingCodegen<B> {
                 sess.abort_if_errors();
                 panic!("expected abort due to worker thread errors")
             }
-            Err(_) => {
+            Err(_err) => {
                 bug!("panic during codegen/LLVM phase");
             }
         });
@@ -1914,6 +1948,7 @@ impl<B: ExtraBackendMethods> OngoingCodegen<B> {
             self.backend.print_pass_timings()
         }
 
+        // HERE
         (
             CodegenResults {
                 metadata: self.metadata,
@@ -1946,6 +1981,10 @@ impl<B: ExtraBackendMethods> OngoingCodegen<B> {
         drop(self.coordinator.sender.send(Box::new(Message::CodegenComplete::<B>)));
     }
 
+    pub fn submit_autodiff_items(&self, items: Vec<AutoDiffItem>) {
+        drop(self.coordinator.sender.send(Box::new(Message::<B>::AddAutoDiffItems(items))));
+    }
+
     pub fn check_for_errors(&self, sess: &Session) {
         self.shared_emitter_main.check(sess, false);
     }
@@ -1970,6 +2009,7 @@ pub fn submit_codegened_module_to_llvm<B: ExtraBackendMethods>(
     module: ModuleCodegen<B::Module>,
     cost: u64,
 ) {
+    // BLUB
     let llvm_work_item = WorkItem::Optimize(module);
     drop(tx_to_llvm_workers.send(Box::new(Message::CodegenDone::<B> { llvm_work_item, cost })));
 }
@@ -2021,8 +2061,8 @@ fn msvc_imps_needed(tcx: TyCtxt<'_>) -> bool {
 
     tcx.sess.target.is_like_windows &&
         tcx.sess.crate_types().iter().any(|ct| *ct == CrateType::Rlib) &&
-    // ThinLTO can't handle this workaround in all cases, so we don't
-    // emit the `__imp_` symbols. Instead we make them unnecessary by disallowing
-    // dynamic linking when linker plugin LTO is enabled.
-    !tcx.sess.opts.cg.linker_plugin_lto.enabled()
+        // ThinLTO can't handle this workaround in all cases, so we don't
+        // emit the `__imp_` symbols. Instead we make them unnecessary by disallowing
+        // dynamic linking when linker plugin LTO is enabled.
+        !tcx.sess.opts.cg.linker_plugin_lto.enabled()
 }

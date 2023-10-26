@@ -597,6 +597,10 @@ impl<'ll, 'tcx> MiscMethods<'tcx> for CodegenCx<'ll, 'tcx> {
             None
         }
     }
+
+    fn create_autodiff(&self) -> Vec<Self::Function> {
+        return vec![];
+    }
 }
 
 impl<'ll> CodegenCx<'ll, '_> {
@@ -630,17 +634,17 @@ impl<'ll> CodegenCx<'ll, '_> {
                 if key == $name {
                     return Some(self.insert_intrinsic($name, Some(&[]), $ret));
                 }
-            );
+                );
             ($name:expr, fn(...) -> $ret:expr) => (
                 if key == $name {
                     return Some(self.insert_intrinsic($name, None, $ret));
                 }
-            );
+                );
             ($name:expr, fn($($arg:expr),*) -> $ret:expr) => (
                 if key == $name {
                     return Some(self.insert_intrinsic($name, Some(&[$($arg),*]), $ret));
                 }
-            );
+                );
         }
         macro_rules! mk_struct {
             ($($field_ty:expr),*) => (self.type_struct( &[$($field_ty),*], false))

@@ -6,6 +6,10 @@
 //! the compiler. This module is also responsible for assembling the sysroot as it
 //! goes along from the output of the previous stage.
 
+// !#[cfg(compiler.stage == 1)]
+// extern "C" {
+// }
+
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::env;
@@ -1356,6 +1360,7 @@ pub struct Assemble {
     pub target_compiler: Compiler,
 }
 
+#[allow(unreachable_code)]
 impl Step for Assemble {
     type Output = Compiler;
     const ONLY_HOSTS: bool = true;
@@ -1409,6 +1414,24 @@ impl Step for Assemble {
             // so that tools using `rustc_private` can use it.
             dist::maybe_install_llvm_target(builder, target_compiler.host, &sysroot);
             return target_compiler;
+        }
+
+        // Build enzyme
+        let enzyme_install = if builder.config.llvm_enzyme {
+            Some(builder.ensure(llvm::Enzyme { target: build_compiler.host }))
+        } else {
+            None
+        };
+
+        if let Some(enzyme_install) = enzyme_install {
+            let src_lib = enzyme_install.join("build/Enzyme/LLVMEnzyme-16.so");
+
+            let libdir = builder.sysroot_libdir(build_compiler, build_compiler.host);
+            let target_libdir = builder.sysroot_libdir(target_compiler, target_compiler.host);
+            let dst_lib = libdir.join("libLLVMEnzyme-16.so");
+            let target_dst_lib = target_libdir.join("libLLVMEnzyme-16.so");
+            builder.copy(&src_lib, &dst_lib);
+            builder.copy(&src_lib, &target_dst_lib);
         }
 
         // Build the libraries for this compiler to link to (i.e., the libraries
@@ -1787,7 +1810,7 @@ pub fn stream_cargo(
     if builder.is_verbose() && !status.success() {
         eprintln!(
             "command did not execute successfully: {:?}\n\
-                  expected success, got: {}",
+            expected success, got: {}",
             cargo, status
         );
     }

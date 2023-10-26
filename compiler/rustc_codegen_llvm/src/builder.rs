@@ -30,6 +30,8 @@ use std::iter;
 use std::ops::Deref;
 use std::ptr;
 
+// use libc::rand;
+
 // All Builders must have an llfn associated with them
 #[must_use]
 pub struct Builder<'a, 'll, 'tcx> {

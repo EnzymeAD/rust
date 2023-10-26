@@ -218,8 +218,8 @@ pub struct InliningMap<'tcx> {
     // Maps a source mono item to the range of mono items
     // accessed by it.
     // The range selects elements within the `targets` vecs.
-    index: FxHashMap<MonoItem<'tcx>, Range<usize>>,
-    targets: Vec<MonoItem<'tcx>>,
+    pub index: FxHashMap<MonoItem<'tcx>, Range<usize>>,
+    pub targets: Vec<MonoItem<'tcx>>,
 
     // Contains one bit per mono item in the `targets` field. That bit
     // is true if that mono item needs to be inlined into every CGU.
@@ -1299,6 +1299,7 @@ impl<'v> RootCollector<'_, 'v> {
     /// monomorphized copy of the start lang item based on
     /// the return type of `main`. This is not needed when
     /// the user writes their own `start` manually.
+    /// TODO: remove annotations after automatic differentation pass
     fn push_extra_entry_roots(&mut self) {
         let Some((main_def_id, EntryFnType::Main { .. })) = self.entry_fn else {
             return;

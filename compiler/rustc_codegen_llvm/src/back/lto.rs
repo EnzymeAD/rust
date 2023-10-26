@@ -244,6 +244,7 @@ fn fat_lto(
         info!("pushing cached module {:?}", wp.cgu_name);
         (buffer, CString::new(wp.cgu_name).unwrap())
     }));
+
     for module in modules {
         match module {
             FatLTOInput::InMemory(m) => in_memory.push(m),
@@ -254,7 +255,6 @@ fn fat_lto(
             }
         }
     }
-
     // Find the "costliest" module and merge everything into that codegen unit.
     // All the other modules will be serialized and reparsed into the new
     // context, so this hopefully avoids serializing and parsing the largest
@@ -700,7 +700,7 @@ pub unsafe fn optimize_thin_module(
     let llcx = llvm::LLVMRustContextCreate(cgcx.fewer_names);
     let llmod_raw = parse_module(llcx, module_name, thin_module.data(), &diag_handler)? as *const _;
     let mut module = ModuleCodegen {
-        module_llvm: ModuleLlvm { llmod_raw, llcx, tm },
+        module_llvm: ModuleLlvm { llmod_raw, llcx, tm, typetrees: Default::default() },
         name: thin_module.name().to_string(),
         kind: ModuleKind::Regular,
     };

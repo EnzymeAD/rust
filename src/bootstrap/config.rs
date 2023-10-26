@@ -116,6 +116,7 @@ pub struct Config {
     // llvm codegen options
     pub llvm_assertions: bool,
     pub llvm_tests: bool,
+    pub llvm_enzyme: bool,
     pub llvm_plugins: bool,
     pub llvm_optimize: bool,
     pub llvm_thin_lto: bool,
@@ -541,9 +542,9 @@ macro_rules! define_config {
         $($field:ident: Option<$field_ty:ty> = $field_key:literal,)*
     }) => {
         $(#[$attr])*
-        struct $name {
-            $($field: Option<$field_ty>,)*
-        }
+            struct $name {
+                $($field: Option<$field_ty>,)*
+            }
 
         impl Merge for $name {
             fn merge(&mut self, other: Self) {
@@ -551,7 +552,7 @@ macro_rules! define_config {
                     if !self.$field.is_some() {
                         self.$field = other.$field;
                     }
-                )*
+                 )*
             }
         }
 
@@ -560,64 +561,64 @@ macro_rules! define_config {
         // compile time of rustbuild.
         impl<'de> Deserialize<'de> for $name {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-            where
-                D: Deserializer<'de>,
-            {
-                struct Field;
-                impl<'de> serde::de::Visitor<'de> for Field {
-                    type Value = $name;
-                    fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                        f.write_str(concat!("struct ", stringify!($name)))
-                    }
-
-                    #[inline]
-                    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-                    where
-                        A: serde::de::MapAccess<'de>,
-                    {
-                        $(let mut $field: Option<$field_ty> = None;)*
-                        while let Some(key) =
-                            match serde::de::MapAccess::next_key::<String>(&mut map) {
-                                Ok(val) => val,
-                                Err(err) => {
-                                    return Err(err);
-                                }
-                            }
-                        {
-                            match &*key {
-                                $($field_key => {
-                                    if $field.is_some() {
-                                        return Err(<A::Error as serde::de::Error>::duplicate_field(
-                                            $field_key,
-                                        ));
-                                    }
-                                    $field = match serde::de::MapAccess::next_value::<$field_ty>(
-                                        &mut map,
-                                    ) {
-                                        Ok(val) => Some(val),
-                                        Err(err) => {
-                                            return Err(err);
-                                        }
-                                    };
-                                })*
-                                key => {
-                                    return Err(serde::de::Error::unknown_field(key, FIELDS));
-                                }
-                            }
+                where
+                    D: Deserializer<'de>,
+                {
+                    struct Field;
+                    impl<'de> serde::de::Visitor<'de> for Field {
+                        type Value = $name;
+                        fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                            f.write_str(concat!("struct ", stringify!($name)))
                         }
-                        Ok($name { $($field),* })
+
+                        #[inline]
+                        fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+                            where
+                                A: serde::de::MapAccess<'de>,
+                            {
+                                $(let mut $field: Option<$field_ty> = None;)*
+                                    while let Some(key) =
+                                        match serde::de::MapAccess::next_key::<String>(&mut map) {
+                                            Ok(val) => val,
+                                            Err(err) => {
+                                                return Err(err);
+                                            }
+                                        }
+                                {
+                                    match &*key {
+                                        $($field_key => {
+                                            if $field.is_some() {
+                                                return Err(<A::Error as serde::de::Error>::duplicate_field(
+                                                        $field_key,
+                                                        ));
+                                            }
+                                            $field = match serde::de::MapAccess::next_value::<$field_ty>(
+                                                &mut map,
+                                                ) {
+                                                Ok(val) => Some(val),
+                                                Err(err) => {
+                                                    return Err(err);
+                                                }
+                                            };
+                                        })*
+                                        key => {
+                                            return Err(serde::de::Error::unknown_field(key, FIELDS));
+                                        }
+                                    }
+                                }
+                                Ok($name { $($field),* })
+                            }
                     }
+                    const FIELDS: &'static [&'static str] = &[
+                        $($field_key,)*
+                    ];
+                    Deserializer::deserialize_struct(
+                        deserializer,
+                        stringify!($name),
+                        FIELDS,
+                        Field,
+                        )
                 }
-                const FIELDS: &'static [&'static str] = &[
-                    $($field_key,)*
-                ];
-                Deserializer::deserialize_struct(
-                    deserializer,
-                    stringify!($name),
-                    FIELDS,
-                    Field,
-                )
-            }
         }
     }
 }
@@ -691,6 +692,7 @@ define_config! {
         release_debuginfo: Option<bool> = "release-debuginfo",
         assertions: Option<bool> = "assertions",
         tests: Option<bool> = "tests",
+        enzyme: Option<bool> = "enzyme",
         plugins: Option<bool> = "plugins",
         ccache: Option<StringOrBool> = "ccache",
         static_libstdcpp: Option<bool> = "static-libstdcpp",
@@ -1092,6 +1094,7 @@ impl Config {
         // we'll infer default values for them later
         let mut llvm_assertions = None;
         let mut llvm_tests = None;
+        let mut llvm_enzyme = None;
         let mut llvm_plugins = None;
         let mut debug = None;
         let mut debug_assertions = None;
@@ -1204,6 +1207,7 @@ impl Config {
             set(&mut config.ninja_in_file, llvm.ninja);
             llvm_assertions = llvm.assertions;
             llvm_tests = llvm.tests;
+            llvm_enzyme = llvm.enzyme;
             llvm_plugins = llvm.plugins;
             set(&mut config.llvm_optimize, llvm.optimize);
             set(&mut config.llvm_thin_lto, llvm.thin_lto);
@@ -1268,6 +1272,7 @@ impl Config {
                 check_ci_llvm!(llvm.polly);
                 check_ci_llvm!(llvm.clang);
                 check_ci_llvm!(llvm.build_config);
+                check_ci_llvm!(llvm.enzyme);
                 check_ci_llvm!(llvm.plugins);
             }
 
@@ -1363,6 +1368,7 @@ impl Config {
 
         config.llvm_assertions = llvm_assertions.unwrap_or(false);
         config.llvm_tests = llvm_tests.unwrap_or(false);
+        config.llvm_enzyme = llvm_enzyme.unwrap_or(false);
         config.llvm_plugins = llvm_plugins.unwrap_or(false);
         config.rust_optimize = optimize.unwrap_or(true);
 
