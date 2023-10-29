@@ -117,6 +117,7 @@ pub struct Config {
     pub llvm_assertions: bool,
     pub llvm_tests: bool,
     pub llvm_enzyme: bool,
+    pub llvm_enzyme_build: Option<String>,
     pub llvm_plugins: bool,
     pub llvm_optimize: bool,
     pub llvm_thin_lto: bool,
@@ -542,9 +543,9 @@ macro_rules! define_config {
         $($field:ident: Option<$field_ty:ty> = $field_key:literal,)*
     }) => {
         $(#[$attr])*
-            struct $name {
-                $($field: Option<$field_ty>,)*
-            }
+        struct $name {
+            $($field: Option<$field_ty>,)*
+        }
 
         impl Merge for $name {
             fn merge(&mut self, other: Self) {
@@ -552,7 +553,7 @@ macro_rules! define_config {
                     if !self.$field.is_some() {
                         self.$field = other.$field;
                     }
-                 )*
+                )*
             }
         }
 
@@ -561,64 +562,64 @@ macro_rules! define_config {
         // compile time of rustbuild.
         impl<'de> Deserialize<'de> for $name {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-                where
-                    D: Deserializer<'de>,
-                {
-                    struct Field;
-                    impl<'de> serde::de::Visitor<'de> for Field {
-                        type Value = $name;
-                        fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                            f.write_str(concat!("struct ", stringify!($name)))
-                        }
+            where
+                D: Deserializer<'de>,
+            {
+                struct Field;
+                impl<'de> serde::de::Visitor<'de> for Field {
+                    type Value = $name;
+                    fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        f.write_str(concat!("struct ", stringify!($name)))
+                    }
 
-                        #[inline]
-                        fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-                            where
-                                A: serde::de::MapAccess<'de>,
+                    #[inline]
+                    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+                        where
+                            A: serde::de::MapAccess<'de>,
+                        {
+                            $(let mut $field: Option<$field_ty> = None;)*
+                                while let Some(key) =
+                                    match serde::de::MapAccess::next_key::<String>(&mut map) {
+                                        Ok(val) => val,
+                                        Err(err) => {
+                                            return Err(err);
+                                        }
+                                    }
                             {
-                                $(let mut $field: Option<$field_ty> = None;)*
-                                    while let Some(key) =
-                                        match serde::de::MapAccess::next_key::<String>(&mut map) {
-                                            Ok(val) => val,
+                                match &*key {
+                                    $($field_key => {
+                                        if $field.is_some() {
+                                            return Err(<A::Error as serde::de::Error>::duplicate_field(
+                                                    $field_key,
+                                                    ));
+                                        }
+                                        $field = match serde::de::MapAccess::next_value::<$field_ty>(
+                                            &mut map,
+                                            ) {
+                                            Ok(val) => Some(val),
                                             Err(err) => {
                                                 return Err(err);
                                             }
-                                        }
-                                {
-                                    match &*key {
-                                        $($field_key => {
-                                            if $field.is_some() {
-                                                return Err(<A::Error as serde::de::Error>::duplicate_field(
-                                                        $field_key,
-                                                        ));
-                                            }
-                                            $field = match serde::de::MapAccess::next_value::<$field_ty>(
-                                                &mut map,
-                                                ) {
-                                                Ok(val) => Some(val),
-                                                Err(err) => {
-                                                    return Err(err);
-                                                }
-                                            };
-                                        })*
-                                        key => {
-                                            return Err(serde::de::Error::unknown_field(key, FIELDS));
-                                        }
+                                        };
+                                    })*
+                                    key => {
+                                        return Err(serde::de::Error::unknown_field(key, FIELDS));
                                     }
                                 }
-                                Ok($name { $($field),* })
                             }
-                    }
-                    const FIELDS: &'static [&'static str] = &[
-                        $($field_key,)*
-                    ];
-                    Deserializer::deserialize_struct(
-                        deserializer,
-                        stringify!($name),
-                        FIELDS,
-                        Field,
-                        )
+                            Ok($name { $($field),* })
+                        }
                 }
+                const FIELDS: &'static [&'static str] = &[
+                    $($field_key,)*
+                ];
+                Deserializer::deserialize_struct(
+                    deserializer,
+                    stringify!($name),
+                    FIELDS,
+                    Field,
+                    )
+            }
         }
     }
 }

@@ -303,7 +303,6 @@ pub fn from_fn_attrs<'ll, 'tcx>(
         } else {
             codegen_fn_attrs.inline
         };
-
     to_add.extend(inline_attr(cx, inline));
 
     // The `uwtable` attribute according to LLVM is:

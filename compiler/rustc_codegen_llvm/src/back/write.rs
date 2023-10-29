@@ -2,7 +2,7 @@ use crate::back::lto::ThinBuffer;
 use crate::back::profiling::{
     selfprofile_after_pass_callback, selfprofile_before_pass_callback, LlvmSelfProfiler,
 };
-
+use crate::base;
 use crate::common;
 use crate::consts;
 use crate::errors::{
@@ -842,7 +842,6 @@ pub(crate) unsafe fn optimize(
         };
         return llvm_optimize(cgcx, diag_handler, module, config, opt_level, opt_stage);
     }
-
     Ok(())
 }
 
@@ -854,7 +853,6 @@ pub(crate) fn link(
     use super::lto::{Linker, ModuleBuffer};
     // Sort the modules by name to ensure deterministic behavior.
     modules.sort_by(|a, b| a.name.cmp(&b.name));
-
     let (first, elements) =
         modules.split_first().expect("Bug! modules must contain at least one module.");
 
@@ -867,7 +865,6 @@ pub(crate) fn link(
         })?;
     }
     drop(linker);
-
     Ok(modules.remove(0))
 }
 

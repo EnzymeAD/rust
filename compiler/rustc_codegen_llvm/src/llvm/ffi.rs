@@ -1,8 +1,6 @@
 #![allow(non_camel_case_types)]
 #![allow(non_upper_case_globals)]
 
-
-use std::ptr;
 use rustc_codegen_ssa::coverageinfo::map as coverage_map;
 use rustc_middle::middle::autodiff_attrs::DiffActivity;
 
@@ -1063,8 +1061,8 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
 
     EnzymeCreateForwardDiff(
         logic_ref, // Logic
-        ptr::null(),
-        ptr::null(),
+        std::ptr::null(),
+        std::ptr::null(),
         fnc,
         ret_activity, // LLVM function, return type
         input_activity.as_ptr(),
@@ -1127,8 +1125,8 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
 
     EnzymeCreatePrimalAndGradient(
         logic_ref, // Logic
-        ptr::null(),
-        ptr::null(),
+        std::ptr::null(),
+        std::ptr::null(),
         fnc,
         ret_activity, // LLVM function, return type
         input_activity.as_ptr(),
@@ -2824,8 +2822,8 @@ pub enum CDerivativeMode {
 extern "C" {
     fn EnzymeCreatePrimalAndGradient<'a>(
         arg1: EnzymeLogicRef,
-        builderCtx: *const u8, // &'a Builder<'_>,
-        callerCtx: *const u8,// &'a Value,
+        _builderCtx: *const u8, // &'a Builder<'_>,
+        _callerCtx: *const u8,// &'a Value,
         todiff: &'a Value,
         retType: CDIFFE_TYPE,
         constant_args: *const CDIFFE_TYPE,
@@ -2849,8 +2847,8 @@ extern "C" {
 extern "C" {
     fn EnzymeCreateForwardDiff<'a>(
         arg1: EnzymeLogicRef,
-        builderCtx: *const u8,// &'a Builder<'_>,
-        callerCtx: *const u8,// &'a Value,
+        _builderCtx: *const u8,// &'a Builder<'_>,
+        _callerCtx: *const u8,// &'a Value,
         todiff: &'a Value,
         retType: CDIFFE_TYPE,
         constant_args: *const CDIFFE_TYPE,

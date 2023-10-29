@@ -783,17 +783,12 @@ pub fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize) -> TypeTr
                         }
                     }
 
-                    //inner_tt.offset = offset;
-
-                    //println!("{:depth$} -> {:?}", "", child);
-
                     Some(child)
                 })
                 .flatten()
                 .collect::<Vec<Type>>();
 
             let ret_tt = TypeTree(fields);
-            //println!("{:depth$} into {:?}", "", ret_tt);
             return ret_tt;
         } else {
             unimplemented!("adt that isn't a struct");
@@ -825,8 +820,6 @@ pub fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize) -> TypeTr
                 .collect(),
         );
 
-        //println!("{:depth$} repeated array into {:?}", "", tt);
-
         return tt;
     }
 
@@ -837,7 +830,6 @@ pub fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize) -> TypeTr
         return subtt;
     }
 
-    //println!("Warning: create empty typetree for {}", ty);
     typetree_empty()
 }
 

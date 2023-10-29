@@ -391,7 +391,6 @@ fn generate_lto_work<'tcx, B: ExtraBackendMethods>(
 
     let (lto_modules, copy_jobs) = if !needs_fat_lto.is_empty() {
         assert!(needs_thin_lto.is_empty());
-
         let mut lto_module =
             B::run_fat_lto(cgcx, needs_fat_lto, import_only_modules).unwrap_or_else(|e| e.raise());
 
@@ -1472,8 +1471,6 @@ fn start_executing_work<B: ExtraBackendMethods>(
                         Err(e) => {
                             let msg = &format!("failed to acquire jobserver token: {}", e);
                             shared_emitter.fatal(msg);
-                            // Exit the coordinator thread
-                            //panic!("{}", msg)
                             codegen_done = true;
                             codegen_aborted = true;
                         }
@@ -1929,7 +1926,7 @@ impl<B: ExtraBackendMethods> OngoingCodegen<B> {
                 sess.abort_if_errors();
                 panic!("expected abort due to worker thread errors")
             }
-            Err(_err) => {
+            Err(_) => {
                 bug!("panic during codegen/LLVM phase");
             }
         });
@@ -1948,7 +1945,6 @@ impl<B: ExtraBackendMethods> OngoingCodegen<B> {
             self.backend.print_pass_timings()
         }
 
-        // HERE
         (
             CodegenResults {
                 metadata: self.metadata,
@@ -2009,7 +2005,6 @@ pub fn submit_codegened_module_to_llvm<B: ExtraBackendMethods>(
     module: ModuleCodegen<B::Module>,
     cost: u64,
 ) {
-    // BLUB
     let llvm_work_item = WorkItem::Optimize(module);
     drop(tx_to_llvm_workers.send(Box::new(Message::CodegenDone::<B> { llvm_work_item, cost })));
 }
@@ -2061,8 +2056,8 @@ fn msvc_imps_needed(tcx: TyCtxt<'_>) -> bool {
 
     tcx.sess.target.is_like_windows &&
         tcx.sess.crate_types().iter().any(|ct| *ct == CrateType::Rlib) &&
-        // ThinLTO can't handle this workaround in all cases, so we don't
-        // emit the `__imp_` symbols. Instead we make them unnecessary by disallowing
-        // dynamic linking when linker plugin LTO is enabled.
-        !tcx.sess.opts.cg.linker_plugin_lto.enabled()
+    // ThinLTO can't handle this workaround in all cases, so we don't
+    // emit the `__imp_` symbols. Instead we make them unnecessary by disallowing
+    // dynamic linking when linker plugin LTO is enabled.
+    !tcx.sess.opts.cg.linker_plugin_lto.enabled()
 }

@@ -95,19 +95,6 @@ extern "C" LLVMTypeRef LLVMRustGetFunctionType(LLVMValueRef Fn) {
     return wrap(Ftype);
 }
 
-// Enzyme
-// extern "C" bool LLVMRustIsNull(LLVMValueRef V) {
-//   Value *Val = unwrap(V);
-//   if (Constant *C = dyn_cast<Constant>(Val))
-//     return C->isNullValue();
-//   return false;
-// }
-// extern "C" LLVMValueRef LLVMRustGetNamedFunction(LLVMModuleRef M,
-//                                                  const char *Name) {
-//   Module *Mod = unwrap(M);
-//   return wrap(Mod->getFunction(Name));
-// }
-
 extern "C" void LLVMRustSetLastError(const char *Err) {
   free((void *)LastError);
   LastError = strdup(Err);

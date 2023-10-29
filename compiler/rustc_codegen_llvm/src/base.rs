@@ -1,3 +1,5 @@
+//! Codegen the MIR to the LLVM IR.
+//!
 //! Hopefully useful general knowledge about codegen:
 //!
 //! * There's no way to find out the [`Ty`] type of a [`Value`]. Doing so
@@ -133,25 +135,6 @@ pub fn compile_codegen_unit(tcx: TyCtxt<'_>, cgu_name: Symbol) -> (ModuleCodegen
             if cx.sess().opts.debuginfo != DebugInfo::None {
                 cx.debuginfo_finalize();
             }
-
-            // find autodiff items and build typetrees for them
-            /*mono_items.iter()
-            //.filter(|(mono_item, _)| mono_item.def_id().map(|x| tcx.autodiff_attrs(x).is_active()).unwrap_or(false))
-            .filter(|(mono_item, _)| mono_item.def_id().map(|x| tcx.autodiff_attrs(x).is_source()).unwrap_or(false))
-            .filter_map(|(mono_item, _)| {
-                let symbol = mono_item.symbol_name(cx.tcx).to_string();
-                match mono_item {
-                    MonoItem::Fn(instance) => {
-                        let ty = instance.ty(tcx, ParamEnv::empty());
-
-                        Some((
-                                symbol,
-                                parse_typetree(tcx, ty, &llvm_module)
-                             ))
-                    },
-                    _ => None
-                }
-            }).collect::<FxHashMap<_, _>>()*/
 
             FxHashMap::default()
         };

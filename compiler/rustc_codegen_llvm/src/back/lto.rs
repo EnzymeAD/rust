@@ -255,6 +255,7 @@ fn fat_lto(
             }
         }
     }
+
     // Find the "costliest" module and merge everything into that codegen unit.
     // All the other modules will be serialized and reparsed into the new
     // context, so this hopefully avoids serializing and parsing the largest

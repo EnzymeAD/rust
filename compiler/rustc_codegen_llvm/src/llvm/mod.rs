@@ -1,7 +1,5 @@
 #![allow(non_snake_case)]
 
-//use crate::enzyme::LLVMValueRef;
-
 pub use self::AtomicRmwBinOp::*;
 pub use self::CallConv::*;
 pub use self::CodeGenOptSize::*;
@@ -32,12 +30,6 @@ impl LLVMRustResult {
         }
     }
 }
-
-// pub fn GetNamedFunction<'ll>(name: &str) -> &'ll LLVMValueRef {
-//     unsafe {
-//         LLVMRustGetN
-//     }
-// }
 
 pub fn AddFunctionAttributes<'ll>(llfn: &'ll Value, idx: AttributePlace, attrs: &[&'ll Attribute]) {
     unsafe {
