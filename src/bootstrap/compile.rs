@@ -6,10 +6,6 @@
 //! the compiler. This module is also responsible for assembling the sysroot as it
 //! goes along from the output of the previous stage.
 
-// !#[cfg(compiler.stage == 1)]
-// extern "C" {
-// }
-
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::env;

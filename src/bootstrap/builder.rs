@@ -1353,7 +1353,7 @@ impl<'a> Builder<'a> {
                 }).unwrap_or_else(|_| {
                     eprintln!(
                         "error: `x.py clippy` requires a host `rustc` toolchain with the `clippy` component"
-                        );
+                    );
                     eprintln!("help: try `rustup component add clippy`");
                     crate::detail_exit(1);
                 });
