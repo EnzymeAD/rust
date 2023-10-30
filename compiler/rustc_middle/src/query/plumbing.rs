@@ -1,5 +1,24 @@
 use crate::dep_graph;
 use crate::dep_graph::DepKind;
+use crate::infer::canonical::{self, Canonical};
+use crate::lint::LintExpectation;
+use crate::metadata::ModChild;
+use crate::middle::autodiff_attrs::{AutoDiffAttrs, AutoDiffItem};
+use crate::middle::codegen_fn_attrs::CodegenFnAttrs;
+use crate::middle::exported_symbols::{ExportedSymbol, SymbolExportInfo};
+use crate::middle::lib_features::LibFeatures;
+use crate::middle::privacy::EffectiveVisibilities;
+use crate::middle::resolve_bound_vars::{ObjectLifetimeDefault, ResolveBoundVars, ResolvedArg};
+use crate::middle::stability::{self, DeprecationEntry};
+use crate::mir;
+use crate::mir::interpret::GlobalId;
+use crate::mir::interpret::{
+    ConstValue, EvalToAllocationRawResult, EvalToConstValueResult, EvalToValTreeResult,
+};
+use crate::mir::interpret::{LitToConstError, LitToConstInput};
+use crate::mir::mono::CodegenUnit;
+
+use crate::query::erase::{erase, restore, Erase};
 use crate::query::on_disk_cache::CacheEncoder;
 use crate::query::on_disk_cache::EncodedDepNodeIndex;
 use crate::query::on_disk_cache::OnDiskCache;
