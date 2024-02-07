@@ -1608,12 +1608,18 @@ impl Step for Assemble {
         };
 
         if let Some(enzyme_install) = enzyme_install {
-            let src_lib = enzyme_install.join("build/Enzyme/LLVMEnzyme-17.so");
+            let (lib_prefix, lib_ext) = match env::consts::OS {
+                "macos" => ("lib", "dylib"),
+                "windows" => ("", "dll"),
+                _ => ("", "so")
+            };
+
+            let src_lib = enzyme_install.join(format!("build/Enzyme/{}LLVMEnzyme-17", lib_prefix)).with_extension(lib_ext);
 
             let libdir = builder.sysroot_libdir(build_compiler, build_compiler.host);
             let target_libdir = builder.sysroot_libdir(target_compiler, target_compiler.host);
-            let dst_lib = libdir.join("libLLVMEnzyme-17.so");
-            let target_dst_lib = target_libdir.join("libLLVMEnzyme-17.so");
+            let dst_lib = libdir.join("libLLVMEnzyme-17").with_extension(lib_ext);
+            let target_dst_lib = target_libdir.join("libLLVMEnzyme-17").with_extension(lib_ext);
             builder.copy(&src_lib, &dst_lib);
             builder.copy(&src_lib, &target_dst_lib);
         }
