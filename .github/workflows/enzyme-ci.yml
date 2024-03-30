@@ -49,7 +49,7 @@ jobs:
           mkdir -p build
           cd build
           rm -f config.toml
-          ../configure --enable-llvm-link-shared --enable-llvm-enzyme --use-lld=self-contained --release-channel=nightly --enable-llvm-assertions --enable-option-checking --enable-ninja --disable-docs
+          ../configure --enable-llvm-link-shared --enable-llvm-enzyme --use-lld=\"self-contained\" --release-channel=nightly --enable-llvm-assertions --enable-option-checking --enable-ninja --disable-docs
           ../x.py build --stage 1 library/std library/proc_macro library/test tools/rustdoc
           rustup toolchain link enzyme build/host/stage1
       - name: checkout Enzyme/rustbook
