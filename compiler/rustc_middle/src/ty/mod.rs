@@ -2736,9 +2736,9 @@ pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<Diff
     let fnc_binder: ty::Binder<'_, ty::FnSig<'_>> = fn_ty.fn_sig(tcx);
 
     // If rustc compiles the unmodified primal, we know that this copy of the function
-    // also has correct lifetimes. We know that Enzyme won't free the shadow to early
+    // also has correct lifetimes. We know that Enzyme won't free the shadow too early
     // (or actually at all), so let's strip lifetimes when computing the layout.
-    // Recomended by compiler-errors:
+    // Recommended by compiler-errors:
     // https://discord.com/channels/273534239310479360/957720175619215380/1223454360676208751
     let x = tcx.instantiate_bound_regions_with_erased(fnc_binder);
     dbg!("creating fncTree");
