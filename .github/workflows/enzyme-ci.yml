@@ -46,6 +46,8 @@ jobs:
           key: ${{ matrix.os }}-enzyme-${{ steps.enzyme-commit.outputs.HEAD }}
       - name: Build
         run: |
+          apt-get -y update
+          apt-get install -y lld
           mkdir -p build
           cd build
           rm -f config.toml
