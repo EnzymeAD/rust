@@ -46,6 +46,8 @@ jobs:
           key: ${{ matrix.os }}-enzyme-${{ steps.enzyme-commit.outputs.HEAD }}
       - name: Build
         run: |
+          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
+          sudo apt-add-repository "deb http://apt.llvm.org/`lsb_release -c | cut -f2`/ llvm-toolchain-`lsb_release -c | cut -f2`-17 main" || true
           sudo apt-get -y update
           sudo apt-get install -y lld-17
           mkdir -p build
