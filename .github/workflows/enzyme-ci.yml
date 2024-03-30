@@ -47,7 +47,7 @@ jobs:
       - name: Build
         run: |
           sudo apt-get -y update
-          sudo apt-get install -y lld
+          sudo apt-get install -y lld-17
           mkdir -p build
           cd build
           rm -f config.toml
