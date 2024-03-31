@@ -53,13 +53,18 @@ pub fn from_ast(ecx: &mut ExtCtxt<'_>, meta_item: &ThinVec<NestedMetaItem>, has_
             return AutoDiffAttrs::inactive();
         },
     };
-    let activities: Vec<DiffActivity> = meta_item[2..]
-        .iter()
-        .map(|x| {
-            let activity_str = name(&x);
-            DiffActivity::from_str(&activity_str).unwrap()
-        })
-        .collect();
+    let mut activities: Vec<DiffActivity> = vec![];
+    for x in &meta_item[2..] {
+        let activity_str = name(&x);
+        let res = DiffActivity::from_str(&activity_str);
+        match res {
+            Ok(x) => activities.push(x),
+            Err(_) => {
+                ecx.sess.dcx().emit_err(errors::AutoDiffUnknownActivity { span: x.span(), act: activity_str });
+                return AutoDiffAttrs::inactive();
+            }
+        };
+    }
 
     // If a return type exist, we need to split the last activity,
     // otherwise we return None as placeholder.

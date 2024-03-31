@@ -1,6 +1,7 @@
 builtin_macros_alloc_error_must_be_fn = alloc_error_handler must be a function
 builtin_macros_alloc_must_statics = allocators must be statics
 
+builtin_macros_autodiff_unknown_activity = did not recognize activity {$act}
 builtin_macros_autodiff = autodiff must be applied to function
 builtin_macros_autodiff_not_build = this rustc version does not support autodiff
 builtin_macros_autodiff_mode_activity = {$act} can not be used in {$mode} Mode
