@@ -109,6 +109,7 @@ pub enum DiffActivity {
     DualOnly,
     Duplicated,
     DuplicatedOnly,
+    FakeActivitySize
 }
 
 impl Display for DiffActivity {
@@ -122,6 +123,7 @@ impl Display for DiffActivity {
             DiffActivity::DualOnly => write!(f, "DualOnly"),
             DiffActivity::Duplicated => write!(f, "Duplicated"),
             DiffActivity::DuplicatedOnly => write!(f, "DuplicatedOnly"),
+            DiffActivity::FakeActivitySize => write!(f, "FakeActivitySize"),
         }
     }
 }

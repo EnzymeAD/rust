@@ -850,7 +850,7 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
     ret_diffactivity: DiffActivity,
     input_tts: Vec<TypeTree>,
     output_tt: TypeTree,
-) -> &Value {
+) -> (&Value, Vec<usize>) {
     let ret_activity = cdiffe_from(ret_diffactivity);
     assert!(ret_activity != CDIFFE_TYPE::DFT_OUT_DIFF);
     let mut input_activity: Vec<CDIFFE_TYPE> = vec![];
@@ -893,7 +893,7 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
         KnownValues: known_values.as_mut_ptr(),
     };
 
-    EnzymeCreateForwardDiff(
+    let res = EnzymeCreateForwardDiff(
         logic_ref, // Logic
         std::ptr::null(),
         std::ptr::null(),
@@ -911,18 +911,19 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
         args_uncacheable.as_ptr(),
         args_uncacheable.len(), // uncacheable arguments
         std::ptr::null_mut(),   // write augmented function to this
-    )
+    );
+    (res, vec![])
 }
 
 pub(crate) unsafe fn enzyme_rust_reverse_diff(
     logic_ref: EnzymeLogicRef,
     type_analysis: EnzymeTypeAnalysisRef,
     fnc: &Value,
-    input_activity: Vec<DiffActivity>,
+    rust_input_activity: Vec<DiffActivity>,
     ret_activity: DiffActivity,
     input_tts: Vec<TypeTree>,
     output_tt: TypeTree,
-) -> &Value {
+) -> (&Value, Vec<usize>) {
     let (primary_ret, ret_activity) = match ret_activity {
         DiffActivity::Const => (true, CDIFFE_TYPE::DFT_CONSTANT),
         DiffActivity::Active => (true, CDIFFE_TYPE::DFT_OUT_DIFF),
@@ -935,7 +936,16 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
     // https://github.com/EnzymeAD/Enzyme.jl/blob/a511e4e6979d6161699f5c9919d49801c0764a09/src/compiler.jl#L3092
     let diff_ret = false;
 
-    let input_activity: Vec<CDIFFE_TYPE> = input_activity.iter().map(|&x| cdiffe_from(x)).collect();
+    let mut primal_sizes = vec![];
+    let mut input_activity: Vec<CDIFFE_TYPE> = vec![];
+    for (i, &x) in rust_input_activity.iter().enumerate() {
+        if is_size(x) {
+            primal_sizes.push(i);
+            input_activity.push(CDIFFE_TYPE::DFT_CONSTANT);
+            continue;
+        }
+        input_activity.push(cdiffe_from(x));
+    }
 
     let mut args_tree = input_tts.iter().map(|x| x.inner).collect::<Vec<_>>();
 
@@ -988,7 +998,7 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
         std::ptr::null_mut(),   // write augmented function to this
         0,
     );
-    res
+    (res, primal_sizes)
 }
 
 extern "C" {
@@ -2810,7 +2820,12 @@ pub mod Shared_AD {
             DiffActivity::DualOnly => CDIFFE_TYPE::DFT_DUP_NONEED,
             DiffActivity::Duplicated => CDIFFE_TYPE::DFT_DUP_ARG,
             DiffActivity::DuplicatedOnly => CDIFFE_TYPE::DFT_DUP_NONEED,
+            DiffActivity::FakeActivitySize => panic!("Implementation error"),
         };
+    }
+
+    pub fn is_size(act: DiffActivity) -> bool {
+        return act == DiffActivity::FakeActivitySize;
     }
 
     #[repr(u32)]

@@ -2762,7 +2762,16 @@ pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<Diff
                 if !da.is_empty() {
                     // We are looking at a slice. The length of that slice will become an
                     // extra integer on llvm level. Integers are always const.
-                    da.insert(i + 1 + offset, DiffActivity::Const);
+                    // However, if the slice get's duplicated, we want to know to later check the
+                    // size. So we mark the new size argument as FakeActivitySize.
+                    let activity = match da[i] {
+                        DiffActivity::DualOnly | DiffActivity::Dual |
+                            DiffActivity::DuplicatedOnly | DiffActivity::Duplicated
+                            => DiffActivity::FakeActivitySize,
+                        DiffActivity::Const => DiffActivity::Const,
+                        _ => panic!("unexpected activity for ptr/ref"),
+                    };
+                    da.insert(i + 1 + offset, activity);
                     offset += 1;
                 }
                 trace!("ABI MATCHING!");
