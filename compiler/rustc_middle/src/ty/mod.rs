@@ -2745,7 +2745,8 @@ pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<Diff
     let mut offset = 0;
     let mut visited = vec![];
     let mut args = vec![];
-    for (i, ty) in x.inputs().iter().enumerate() {
+    let mut i = 0;
+    for ty in x.inputs().iter() {
         visited.clear();
         if ty.is_unsafe_ptr() || ty.is_ref() || ty.is_box() {
             if ty.is_fn_ptr() {
@@ -2775,11 +2776,13 @@ pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<Diff
                     offset += 1;
                 }
                 trace!("ABI MATCHING!");
+                i += 1;
                 continue;
             }
         }
         let arg_tt = typetree_from_ty(*ty, tcx, 0, false, &mut visited);
         args.push(arg_tt);
+        i += 1;
     }
 
     visited.clear();

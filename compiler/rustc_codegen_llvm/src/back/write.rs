@@ -800,8 +800,10 @@ unsafe fn create_call<'a>(tgt: &'a Value, src: &'a Value, rev_mode: bool,
 
 
         let mut arg_vec = vec![add_panic_msg_to_global(llmod, llcx)];
-        let name1 = "_ZN4core9panicking14panic_explicit17h8607a79b2acfb83bE";
-        let name2 = "_RN4core9panicking14panic_explicit17h8607a79b2acfb83bE";
+        //let name1 = "_ZN4core9panicking14panic_explicit17h8607a79b2acfb83bE";
+        //let name2 = "_RN4core9panicking14panic_explicit17h8607a79b2acfb83bE";
+        let name1 = "_ZN4core9panicking14panic_explicit17hefa83a6d881eff8dE";
+        let name2 = "_RN4core9panicking14panic_explicit17hefa83a6d881eff8dE";
         let cname1 = CString::new(name1).unwrap();
         let cname2 = CString::new(name2).unwrap();
 
