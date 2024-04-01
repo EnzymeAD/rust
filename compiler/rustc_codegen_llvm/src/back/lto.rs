@@ -616,7 +616,9 @@ pub(crate) fn run_pass_manager(
         }
         let opt_stage = if thin { llvm::OptStage::ThinLTO } else { llvm::OptStage::FatLTO };
         let opt_level = config.opt_level.unwrap_or(config::OptLevel::No);
-        write::llvm_optimize(cgcx, dcx, module, config, opt_level, opt_stage)?;
+        // We will run this again with different values in the context of automatic differentiation.
+        let first_run = true;
+        write::llvm_optimize(cgcx, dcx, module, config, opt_level, opt_stage, first_run)?;
     }
     debug!("lto done");
     Ok(())
