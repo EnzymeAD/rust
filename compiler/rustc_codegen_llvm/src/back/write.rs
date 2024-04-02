@@ -798,29 +798,15 @@ unsafe fn create_call<'a>(tgt: &'a Value, src: &'a Value, rev_mode: bool,
         LLVMPositionBuilderAtEnd(builder, fail_bb);
 
 
+        let panic_name: CString = get_panic_name(llmod);
 
         let mut arg_vec = vec![add_panic_msg_to_global(llmod, llcx)];
-        //let name1 = "_ZN4core9panicking14panic_explicit17h8607a79b2acfb83bE";
-        //let name2 = "_RN4core9panicking14panic_explicit17h8607a79b2acfb83bE";
-        let name1 = "_ZN4core9panicking14panic_explicit17hefa83a6d881eff8dE";
-        let name2 = "_RN4core9panicking14panic_explicit17hefa83a6d881eff8dE";
-        let cname1 = CString::new(name1).unwrap();
-        let cname2 = CString::new(name2).unwrap();
 
-        let fnc1 = llvm::LLVMGetNamedFunction(llmod, cname1.as_ptr() as *const c_char);
-        let call;
-        if fnc1.is_none() {
-            let fnc2 = llvm::LLVMGetNamedFunction(llmod, cname2.as_ptr() as *const c_char);
-            assert!(fnc2.is_some());
-            let fnc2 = fnc2.unwrap();
-            let ty = LLVMRustGetFunctionType(fnc2);
-            // now call with msg
-            call = LLVMBuildCall2(builder, ty, fnc2, arg_vec.as_mut_ptr(), arg_vec.len(), name2.as_ptr() as *const c_char);
-        } else {
-            let fnc1 = fnc1.unwrap();
-            let ty = LLVMRustGetFunctionType(fnc1);
-            call = LLVMBuildCall2(builder, ty, fnc1, arg_vec.as_mut_ptr(), arg_vec.len(), name1.as_ptr() as *const c_char);
-        }
+        let fnc1 = llvm::LLVMGetNamedFunction(llmod, panic_name.as_ptr() as *const c_char);
+        assert!(fnc1.is_some());
+        let fnc1 = fnc1.unwrap();
+        let ty = LLVMRustGetFunctionType(fnc1);
+        let call = LLVMBuildCall2(builder, ty, fnc1, arg_vec.as_mut_ptr(), arg_vec.len(), panic_name.as_ptr() as *const c_char);
         llvm::LLVMSetTailCall(call, 1);
         llvm::LLVMBuildUnreachable(builder);
         LLVMPositionBuilderAtEnd(builder, success_bb);
@@ -879,7 +865,25 @@ unsafe fn create_call<'a>(tgt: &'a Value, src: &'a Value, rev_mode: bool,
     let _fnc_ok =
         LLVMVerifyFunction(tgt, llvm::LLVMVerifierFailureAction::LLVMAbortProcessAction);
 }
-
+unsafe fn get_panic_name(llmod: &llvm::Module) -> CString {
+    // The names are mangled and their ending changes based on a hash, so just take whichever.
+    let mut f = LLVMGetFirstFunction(llmod);
+    loop {
+        if let Some(lf) = f {
+            f = LLVMGetNextFunction(lf);
+            let fnc_name = llvm::get_value_name(lf);
+            let fnc_name: String = String::from_utf8(fnc_name.to_vec()).unwrap();
+            if fnc_name.starts_with("_ZN4core9panicking14panic_explicit") {
+                return CString::new(fnc_name).unwrap();
+            } else if fnc_name.starts_with("_RN4core9panicking14panic_explicit") {
+                return CString::new(fnc_name).unwrap();
+            }
+        } else {
+            break;
+        }
+    }
+    panic!("Could not find panic function");
+}
 unsafe fn add_panic_msg_to_global<'a>(llmod: &'a llvm::Module, llcx: &'a llvm::Context) -> &'a llvm::Value {
     use llvm::*;
 
