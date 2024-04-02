@@ -2657,6 +2657,7 @@ pub mod Fallback_AD {
     pub fn EnzymeSetCLBool(arg1: *mut ::std::os::raw::c_void, arg2: u8) { unimplemented!() }
     pub fn EnzymeSetCLInteger(arg1: *mut ::std::os::raw::c_void, arg2: i64) { unimplemented!() }
 
+    pub fn set_inline(val: bool) { unimplemented!() }
     pub fn set_runtime_activity_check(check: bool) { unimplemented!() }
     pub fn set_max_int_offset(offset: u64) { unimplemented!() }
     pub fn set_max_type_offset(offset: u64) { unimplemented!() }
@@ -3017,6 +3018,7 @@ extern "C" {
     static mut EnzymePrint: c_void;
     static mut EnzymeStrictAliasing: c_void;
     static mut looseTypeAnalysis: c_void;
+    static mut EnzymeInline: c_void;
 }
 pub fn set_runtime_activity_check(check: bool) {
     unsafe {
@@ -3069,6 +3071,11 @@ pub fn set_strict_aliasing(strict: bool) {
 pub fn set_loose_types(loose: bool) {
     unsafe {
         EnzymeSetCLBool(std::ptr::addr_of_mut!(looseTypeAnalysis), loose as u8);
+    }
+}
+pub fn set_inline(val: bool) {
+    unsafe {
+        EnzymeSetCLBool(std::ptr::addr_of_mut!(EnzymeInline), val as u8);
     }
 }
 

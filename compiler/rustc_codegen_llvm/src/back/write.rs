@@ -1089,6 +1089,12 @@ pub(crate) unsafe fn differentiate(
             LLVMDumpModule(llmod);
         }
     }
+
+    if std::env::var("ENZYME_INLINE").is_ok() {
+        dbg!("Setting inline to true");
+        llvm::set_inline(true);
+    }
+
     if std::env::var("ENZYME_TT_DEPTH").is_ok() {
         let depth = std::env::var("ENZYME_TT_DEPTH").unwrap();
         let depth = depth.parse::<u64>().unwrap();
