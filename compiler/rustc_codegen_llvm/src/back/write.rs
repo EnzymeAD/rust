@@ -1102,6 +1102,11 @@ pub(crate) unsafe fn differentiate(
         llvm::set_max_type_offset(width);
     }
 
+    if std::env::var("ENZYME_RUNTIME_ACTIVITY").is_ok() {
+        dbg!("Setting runtime activity check to true");
+        llvm::set_runtime_activity_check(true);
+    }
+
     let differentiate = !diff_items.is_empty();
     for item in diff_items {
         let res = enzyme_ad(llmod, llcx, &diag_handler, item);

@@ -2657,6 +2657,7 @@ pub mod Fallback_AD {
     pub fn EnzymeSetCLBool(arg1: *mut ::std::os::raw::c_void, arg2: u8) { unimplemented!() }
     pub fn EnzymeSetCLInteger(arg1: *mut ::std::os::raw::c_void, arg2: i64) { unimplemented!() }
 
+    pub fn set_runtime_activity_check(check: bool) { unimplemented!() }
     pub fn set_max_int_offset(offset: u64) { unimplemented!() }
     pub fn set_max_type_offset(offset: u64) { unimplemented!() }
     pub fn set_max_type_depth(depth: u64) { unimplemented!() }
@@ -3009,12 +3010,18 @@ extern "C" {
     static mut MaxTypeOffset: c_void;
     static mut EnzymeMaxTypeDepth: c_void;
 
+    static mut EnzymeRuntimeActivityCheck: c_void;
     static mut EnzymePrintPerf: c_void;
     static mut EnzymePrintActivity: c_void;
     static mut EnzymePrintType: c_void;
     static mut EnzymePrint: c_void;
     static mut EnzymeStrictAliasing: c_void;
     static mut looseTypeAnalysis: c_void;
+}
+pub fn set_runtime_activity_check(check: bool) {
+    unsafe {
+        EnzymeSetCLBool(std::ptr::addr_of_mut!(EnzymeRuntimeActivityCheck), check as u8);
+    }
 }
 pub fn set_max_int_offset(offset: u64) {
     let offset = offset.try_into().unwrap();
