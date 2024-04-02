@@ -2742,11 +2742,11 @@ pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<Diff
     // https://discord.com/channels/273534239310479360/957720175619215380/1223454360676208751
     let x = tcx.instantiate_bound_regions_with_erased(fnc_binder);
 
-    let mut offset = 0;
+    let mut new_activities = vec![];
+    let mut new_positions = vec![];
     let mut visited = vec![];
     let mut args = vec![];
-    let mut i = 0;
-    for ty in x.inputs().iter() {
+    for (i, ty) in x.inputs().iter().enumerate() {
         visited.clear();
         if ty.is_unsafe_ptr() || ty.is_ref() || ty.is_box() {
             if ty.is_fn_ptr() {
@@ -2772,17 +2772,23 @@ pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<Diff
                         DiffActivity::Const => DiffActivity::Const,
                         _ => panic!("unexpected activity for ptr/ref"),
                     };
-                    da.insert(i + 1 + offset, activity);
-                    offset += 1;
+                    new_activities.push(activity);
+                    new_positions.push(i + 1);
                 }
                 trace!("ABI MATCHING!");
-                i += 1;
                 continue;
             }
         }
         let arg_tt = typetree_from_ty(*ty, tcx, 0, false, &mut visited);
         args.push(arg_tt);
-        i += 1;
+    }
+
+    // now add the extra activities coming from slices
+    // Reverse order to not invalidate the indices
+    for _ in 0..new_activities.len() {
+        let pos = new_positions.pop().unwrap();
+        let activity = new_activities.pop().unwrap();
+        da.insert(pos, activity);
     }
 
     visited.clear();
