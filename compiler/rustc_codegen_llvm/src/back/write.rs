@@ -1084,7 +1084,7 @@ pub(crate) unsafe fn differentiate(
         llvm::set_loose_types(true);
     }
 
-    if std::env::var("ENZYME_PRINT_MOD").is_ok() {
+    if std::env::var("ENZYME_PRINT_MOD_BEFORE").is_ok() {
         unsafe {
             LLVMDumpModule(llmod);
         }
@@ -1142,7 +1142,7 @@ pub(crate) unsafe fn differentiate(
             break;
         }
     }
-    if std::env::var("ENZYME_PRINT_MOD_AFTER").is_ok() {
+    if std::env::var("ENZYME_PRINT_MOD_AFTER_ENZYME").is_ok() {
         unsafe {
             LLVMDumpModule(llmod);
         }
@@ -1159,9 +1159,19 @@ pub(crate) unsafe fn differentiate(
                 _ if cgcx.opts.cg.linker_plugin_lto.enabled() => llvm::OptStage::PreLinkThinLTO,
                 _ => llvm::OptStage::PreLinkNoLTO,
             };
-            let first_run = false;
+            let mut first_run = false;
             dbg!("Running Module Optimization after differentiation");
+            if std::env::var("ENZYME_NO_VEC_UNROLL").is_ok() {
+                // disables vectorization and loop unrolling
+                first_run = true;
+            }
             llvm_optimize(cgcx, &diag_handler, module, config, opt_level, opt_stage, first_run)?;
+        }
+    }
+
+    if std::env::var("ENZYME_PRINT_MOD_AFTER_OPTS").is_ok() {
+        unsafe {
+            LLVMDumpModule(llmod);
         }
     }
 
