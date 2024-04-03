@@ -3,7 +3,7 @@
 //use crate::util::check_autodiff;
 
 use crate::errors;
-use rustc_ast::expand::autodiff_attrs::{AutoDiffAttrs, DiffActivity, DiffMode, valid_input_activity, valid_ty_for_activity};
+use rustc_ast::expand::autodiff_attrs::{AutoDiffAttrs, DiffActivity, DiffMode, is_fwd, is_rev, valid_input_activity, valid_ty_for_activity};
 use rustc_ast::ptr::P;
 use rustc_ast::token::{Token, TokenKind};
 use rustc_ast::tokenstream::*;
@@ -308,7 +308,7 @@ fn gen_enzyme_body(
 
     let primal_ret = sig.decl.output.has_ret();
 
-    if primal_ret && n_active == 0 && x.mode == DiffMode::Reverse {
+    if primal_ret && n_active == 0 && is_rev(x.mode) {
         // We only have the primal ret.
         body.stmts.push(ecx.stmt_expr(black_box_primal_call.clone()));
         return body;
@@ -355,7 +355,7 @@ fn gen_enzyme_body(
             panic!("Did not expect non-tuple ret ty: {:?}", d_ret_ty);
         }
     };
-    if x.mode == DiffMode::Forward {
+    if is_fwd(x.mode) {
         if x.ret_activity == DiffActivity::Dual {
             assert!(d_ret_ty.len() == 2);
             // both should be identical, by construction
@@ -369,7 +369,7 @@ fn gen_enzyme_body(
             exprs.push(default_call_expr);
         }
     } else {
-        assert!(x.mode == DiffMode::Reverse);
+        assert!(is_rev(x.mode));
 
         if primal_ret {
             // We have extra handling above for the primal ret
@@ -508,7 +508,7 @@ fn gen_enzyme_decl(
 
     // If we return a scalar in the primal and the scalar is active,
     // then add it as last arg to the inputs.
-    if let DiffMode::Reverse = x.mode {
+    if is_rev(x.mode) {
         if let DiffActivity::Active = x.ret_activity {
             let ty = match d_decl.output {
                 FnRetTy::Ty(ref ty) => ty.clone(),
@@ -537,7 +537,7 @@ fn gen_enzyme_decl(
     }
     d_decl.inputs = d_inputs.into();
 
-    if let DiffMode::Forward = x.mode {
+    if is_fwd(x.mode) {
         if let DiffActivity::Dual = x.ret_activity {
             let ty = match d_decl.output {
                 FnRetTy::Ty(ref ty) => ty.clone(),

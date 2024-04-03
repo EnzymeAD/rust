@@ -11,6 +11,21 @@ pub enum DiffMode {
     Source,
     Forward,
     Reverse,
+    ForwardFirst,
+    ReverseFirst,
+}
+
+pub fn is_rev(mode: DiffMode) -> bool {
+    match mode {
+        DiffMode::Reverse | DiffMode::ReverseFirst => true,
+        _ => false,
+    }
+}
+pub fn is_fwd(mode: DiffMode) -> bool {
+    match mode {
+        DiffMode::Forward | DiffMode::ForwardFirst => true,
+        _ => false,
+    }
 }
 
 impl Display for DiffMode {
@@ -20,6 +35,8 @@ impl Display for DiffMode {
             DiffMode::Source => write!(f, "Source"),
             DiffMode::Forward => write!(f, "Forward"),
             DiffMode::Reverse => write!(f, "Reverse"),
+            DiffMode::ForwardFirst => write!(f, "ForwardFirst"),
+            DiffMode::ReverseFirst => write!(f, "ReverseFirst"),
         }
     }
 }
@@ -32,12 +49,12 @@ pub fn valid_ret_activity(mode: DiffMode, activity: DiffActivity) -> bool {
     match mode {
         DiffMode::Inactive => false,
         DiffMode::Source => false,
-        DiffMode::Forward => {
+        DiffMode::Forward | DiffMode::ForwardFirst => {
             activity == DiffActivity::Dual ||
                 activity == DiffActivity::DualOnly ||
                 activity == DiffActivity::Const
         }
-        DiffMode::Reverse => {
+        DiffMode::Reverse | DiffMode::ReverseFirst => {
             activity == DiffActivity::Const ||
                 activity == DiffActivity::Active ||
                 activity == DiffActivity::ActiveOnly
@@ -73,13 +90,13 @@ pub fn valid_input_activity(mode: DiffMode, activity: DiffActivity) -> bool {
         return match mode {
             DiffMode::Inactive => false,
             DiffMode::Source => false,
-            DiffMode::Forward => {
+            DiffMode::Forward | DiffMode::ForwardFirst => {
                 // These are the only valid cases
                 activity == DiffActivity::Dual ||
                     activity == DiffActivity::DualOnly ||
                     activity == DiffActivity::Const
             }
-            DiffMode::Reverse => {
+            DiffMode::Reverse | DiffMode::ReverseFirst => {
                 // These are the only valid cases
                 activity == DiffActivity::Active ||
                     activity == DiffActivity::ActiveOnly ||
@@ -137,6 +154,8 @@ impl FromStr for DiffMode {
             "Source" => Ok(DiffMode::Source),
             "Forward" => Ok(DiffMode::Forward),
             "Reverse" => Ok(DiffMode::Reverse),
+            "ForwardFirst" => Ok(DiffMode::ForwardFirst),
+            "ReverseFirst" => Ok(DiffMode::ReverseFirst),
             _ => Err(()),
         }
     }

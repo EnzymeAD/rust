@@ -947,6 +947,7 @@ pub(crate) unsafe fn enzyme_ad(
     llcx: &llvm::Context,
     diag_handler: &DiagCtxt,
     item: AutoDiffItem,
+    logic_ref: EnzymeLogicRef,
 ) -> Result<(), FatalError> {
     let autodiff_mode = item.attrs.mode;
     let rust_name = item.source;
@@ -1001,13 +1002,6 @@ pub(crate) unsafe fn enzyme_ad(
         item.inputs.into_iter().map(|x| to_enzyme_typetree(x, llvm_data_layout, llcx)).collect();
     let output_tt = to_enzyme_typetree(item.output, llvm_data_layout, llcx);
 
-    let mut fnc_opt = false;
-    if std::env::var("ENZYME_ENABLE_FNC_OPT").is_ok() {
-        dbg!("Disabling optimizations for Enzyme");
-        fnc_opt = true;
-    }
-
-    let logic_ref: EnzymeLogicRef = CreateEnzymeLogic(fnc_opt as u8);
     let type_analysis: EnzymeTypeAnalysisRef =
         CreateTypeAnalysis(logic_ref, std::ptr::null_mut(), std::ptr::null_mut(), 0);
 
@@ -1026,7 +1020,14 @@ pub(crate) unsafe fn enzyme_ad(
         llvm::set_print(true);
     }
 
-    let mut tmp = match item.attrs.mode {
+    let mode = match autodiff_mode {
+        DiffMode::Forward => DiffMode::Forward,
+        DiffMode::Reverse => DiffMode::Reverse,
+        DiffMode::ForwardFirst => DiffMode::Forward,
+        DiffMode::ReverseFirst => DiffMode::Reverse,
+        _ => unreachable!(),
+    };
+    let mut tmp = match mode {
         DiffMode::Forward => enzyme_rust_forward_diff(
             logic_ref,
             type_analysis,
@@ -1114,8 +1115,35 @@ pub(crate) unsafe fn differentiate(
     }
 
     let differentiate = !diff_items.is_empty();
+    let mut first_order_items: Vec<AutoDiffItem> = vec![];
+    let mut higher_order_items: Vec<AutoDiffItem> = vec![];
     for item in diff_items {
-        let res = enzyme_ad(llmod, llcx, &diag_handler, item);
+        if item.attrs.mode == DiffMode::ForwardFirst || item.attrs.mode == DiffMode::ReverseFirst{
+            first_order_items.push(item);
+        } else {
+            // default
+            higher_order_items.push(item);
+        }
+    }
+
+    let mut fnc_opt = false;
+    if std::env::var("ENZYME_ENABLE_FNC_OPT").is_ok() {
+        dbg!("Enable extra optimizations for Enzyme");
+        fnc_opt = true;
+    }
+    let _logic_ref: EnzymeLogicRef = CreateEnzymeLogic(fnc_opt as u8);
+
+    // If a function is a base for some higher order ad, always optimize
+    let fnc_opt_base = true;
+    let logic_ref_opt: EnzymeLogicRef = CreateEnzymeLogic(fnc_opt_base as u8);
+
+    for item in first_order_items {
+        let res = enzyme_ad(llmod, llcx, &diag_handler, item, logic_ref_opt);
+        assert!(res.is_ok());
+    }
+    for item in higher_order_items {
+        let res = enzyme_ad(llmod, llcx, &diag_handler, item, logic_ref_opt);
+        //let res = enzyme_ad(llmod, llcx, &diag_handler, item, logic_ref);
         assert!(res.is_ok());
     }
 

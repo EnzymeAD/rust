@@ -879,8 +879,8 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
     let args_uncacheable = vec![0; input_tts.len()];
     assert!(args_uncacheable.len() == input_activity.len());
     let num_fnc_args = LLVMCountParams(fnc);
-    println!("num_fnc_args: {}", num_fnc_args);
-    println!("input_activity.len(): {}", input_activity.len());
+    trace!("num_fnc_args: {}", num_fnc_args);
+    trace!("input_activity.len(): {}", input_activity.len());
     assert!(num_fnc_args == input_activity.len() as u32);
 
     let kv_tmp = IntList { data: std::ptr::null_mut(), size: 0 };
@@ -893,6 +893,10 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
         KnownValues: known_values.as_mut_ptr(),
     };
 
+    trace!("ret_activity: {}", &ret_activity);
+    for i in &input_activity {
+        trace!("input_activity i: {}", &i);
+    }
     let res = EnzymeCreateForwardDiff(
         logic_ref, // Logic
         std::ptr::null(),
@@ -912,6 +916,7 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
         args_uncacheable.len(), // uncacheable arguments
         std::ptr::null_mut(),   // write augmented function to this
     );
+    dbg!(res);
     (res, vec![])
 }
 
@@ -971,10 +976,10 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
         KnownValues: known_values.as_mut_ptr(),
     };
 
-    trace!("{}", &primary_ret);
-    trace!("{}", &ret_activity);
+    trace!("primary_ret: {}", &primary_ret);
+    trace!("ret_activity: {}", &ret_activity);
     for i in &input_activity {
-        trace!("{}", &i);
+        trace!("input_activity i: {}", &i);
     }
     let res = EnzymeCreatePrimalAndGradient(
         logic_ref, // Logic
@@ -998,6 +1003,7 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
         std::ptr::null_mut(),   // write augmented function to this
         0,
     );
+    dbg!(res);
     (res, primal_sizes)
 }
 

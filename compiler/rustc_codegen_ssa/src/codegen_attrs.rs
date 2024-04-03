@@ -749,6 +749,8 @@ fn autodiff_attrs(tcx: TyCtxt<'_>, id: DefId) -> AutoDiffAttrs {
     let mode = match mode.as_str() {
         "Forward" => DiffMode::Forward,
         "Reverse" => DiffMode::Reverse,
+        "ForwardFirst" => DiffMode::ForwardFirst,
+        "ReverseFirst" => DiffMode::ReverseFirst,
         _ => {
             tcx.sess
                 .struct_span_err(attr.span, msg_mode)
