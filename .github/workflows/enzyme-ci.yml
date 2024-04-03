@@ -28,7 +28,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
       - name: Get LLVM commit hash
         id: llvm-commit
-        run: echo "HEAD=$(git -C src/llvm-project rev-parse HEAD)" >> $GITHUB_OUTPUT
+        run: echo "HEAD=$(git rev-parse HEAD:src/llvm-project)" >> $GITHUB_OUTPUT
       - name: Cache LLVM
         id: cache-llvm
         uses: actions/cache@v4
@@ -37,7 +37,7 @@ jobs:
           key: ${{ matrix.os }}-llvm-${{ steps.llvm-commit.outputs.HEAD }}
       - name: Get Enzyme commit hash
         id: enzyme-commit
-        run: echo "HEAD=$(git -C src/tools/enzyme rev-parse HEAD)" >> $GITHUB_OUTPUT
+        run: echo "HEAD=$(git rev-parse HEAD:src/tools/enzyme)" >> $GITHUB_OUTPUT
       - name: Cache Enzyme
         id: cache-enzyme
         uses: actions/cache@v4
