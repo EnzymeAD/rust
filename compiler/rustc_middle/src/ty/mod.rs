@@ -21,7 +21,7 @@ pub use self::AssocItemContainer::*;
 pub use self::BorrowKind::*;
 pub use self::IntVarValue::*;
 pub use self::Variance::*;
-use crate::error::{OpaqueHiddenTypeMismatch, TypeMismatchReason, UnsupportedUnion};
+use crate::error::{OpaqueHiddenTypeMismatch, TypeMismatchReason, UnsupportedUnion, AutodiffUnsafeInnerConstRef};
 use crate::metadata::ModChild;
 use crate::middle::privacy::EffectiveVisibilities;
 use crate::mir::{Body, CoroutineLayout};
@@ -105,6 +105,7 @@ pub use self::typeck_results::{
     CanonicalUserType, CanonicalUserTypeAnnotation, CanonicalUserTypeAnnotations, IsIdentity,
     TypeckResults, UserType, UserTypeAnnotationIndex,
 };
+use crate::query::Key;
 
 pub mod _match;
 pub mod abstract_const;
@@ -2722,14 +2723,25 @@ mod size_asserts {
 
 pub fn typetree_from<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> TypeTree {
     let mut visited = vec![];
-    let ty = typetree_from_ty(ty, tcx, 0, false, &mut visited);
+    let ty = typetree_from_ty(ty, tcx, 0, false, &mut visited, None);
     let tt = Type { offset: -1, kind: Kind::Pointer, size: 8, child: ty };
     return TypeTree(vec![tt]);
 }
 
 use rustc_ast::expand::autodiff_attrs::DiffActivity;
 
-pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<DiffActivity>) -> FncTree {
+// This function combines three tasks. To avoid traversing each type 3x, we combine them.
+// 1. Create a TypeTree from a Ty. This is the main task.
+// 2. IFF da is not empty, we also want to adjust DiffActivity to account for future MIR->LLVM
+//    lowering. E.g. fat ptr are going to introduce an extra int.
+// 3. IFF da is not empty, we are creating TT for a function directly differentiated (has an
+//    autodiff macro on top). Here we want to make sure that shadows are mutable internally.
+//    We know the outermost ref/ptr indirection is mutability - we generate it like that.
+//    We now have to make sure that inner ptr/ref are mutable too, or issue a warning.
+//    Not an error, becaues it only causes issues if they are actually read, which we don't check
+//    yet. We should add such analysis to relibably either issue an error or accept without warning.
+//    If there only were some reasearch to do that...
+pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<DiffActivity>, span: Option<Span>) -> FncTree {
     if !fn_ty.is_fn() {
         return FncTree { args: vec![], ret: TypeTree::new() };
     }
@@ -2747,6 +2759,19 @@ pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<Diff
     let mut visited = vec![];
     let mut args = vec![];
     for (i, ty) in x.inputs().iter().enumerate() {
+        // We care about safety checks, if an argument get's duplicated and we write into the
+        // shadow. That's equivalent to Duplicated or DuplicatedOnly.
+        let safety = if !da.is_empty() {
+            // If we have Activities, we also have spans
+            assert!(span.is_some());
+            match da[i] {
+                DiffActivity::DuplicatedOnly | DiffActivity::Duplicated => true,
+                _ => false,
+            }
+        } else {
+            false
+        };
+
         visited.clear();
         if ty.is_unsafe_ptr() || ty.is_ref() || ty.is_box() {
             if ty.is_fn_ptr() {
@@ -2755,7 +2780,7 @@ pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<Diff
             let inner_ty = ty.builtin_deref(true).unwrap().ty;
             if inner_ty.is_slice() {
                 // We know that the lenght will be passed as extra arg.
-                let child = typetree_from_ty(inner_ty, tcx, 0, false, &mut visited);
+                let child = typetree_from_ty(inner_ty, tcx, 1, safety, &mut visited, span);
                 let tt = Type { offset: -1, kind: Kind::Pointer, size: 8, child };
                 args.push(TypeTree(vec![tt]));
                 let i64_tt = Type { offset: -1, kind: Kind::Integer, size: 8, child: TypeTree::new() };
@@ -2779,7 +2804,7 @@ pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<Diff
                 continue;
             }
         }
-        let arg_tt = typetree_from_ty(*ty, tcx, 0, false, &mut visited);
+        let arg_tt = typetree_from_ty(*ty, tcx, 0, safety, &mut visited, span);
         args.push(arg_tt);
     }
 
@@ -2792,12 +2817,12 @@ pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<Diff
     }
 
     visited.clear();
-    let ret = typetree_from_ty(x.output(), tcx, 0, false, &mut visited);
+    let ret = typetree_from_ty(x.output(), tcx, 0, false, &mut visited, span);
 
     FncTree { args, ret }
 }
 
-pub fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize, safety: bool, visited: &mut Vec<Ty<'a>>) -> TypeTree {
+fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize, safety: bool, visited: &mut Vec<Ty<'a>>, span: Option<Span>) -> TypeTree {
     if depth > 20 {
         trace!("depth > 20 for ty: {}", &ty);
     }
@@ -2812,9 +2837,33 @@ pub fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize, safety: b
         if ty.is_fn_ptr() {
             unimplemented!("what to do whith fn ptr?");
         }
-        let inner_ty = ty.builtin_deref(true).unwrap().ty;
+
+        let inner_ty_and_mut = ty.builtin_deref(true).unwrap();
+        let is_mut = inner_ty_and_mut.mutbl == hir::Mutability::Mut;
+        let inner_ty = inner_ty_and_mut.ty;
+
+        // Now account for inner mutability.
+        if !is_mut && depth > 0 && safety {
+            let ptr_ty: String = if ty.is_ref() {
+                "ref"
+            } else if ty.is_unsafe_ptr() {
+                "ptr"
+            } else {
+                assert!(ty.is_box());
+                "box"
+            }.to_string();
+
+            // If we have mutability, we also have a span
+            assert!(span.is_some());
+            let span = span.unwrap();
+
+            tcx.sess
+            .dcx()
+            .emit_warning(AutodiffUnsafeInnerConstRef{span, ty: ptr_ty});
+        }
+
         //visited.push(inner_ty);
-        let child = typetree_from_ty(inner_ty, tcx, depth + 1, safety, visited);
+        let child = typetree_from_ty(inner_ty, tcx, depth + 1, safety, visited, span);
         let tt = Type { offset: -1, kind: Kind::Pointer, size: 8, child };
         visited.pop();
         return TypeTree(vec![tt]);
@@ -2884,7 +2933,7 @@ pub fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize, safety: b
                     }
 
                     //visited.push(field_ty);
-                    let mut child = typetree_from_ty(field_ty, tcx, depth + 1, safety, visited).0;
+                    let mut child = typetree_from_ty(field_ty, tcx, depth + 1, safety, visited, span).0;
 
                     for c in &mut child {
                         if c.offset == -1 {
@@ -2916,7 +2965,7 @@ pub fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize, safety: b
         trace!("simd");
         let (_size, inner_ty) = ty.simd_size_and_type(tcx);
         //visited.push(inner_ty);
-        let _sub_tt = typetree_from_ty(inner_ty, tcx, depth + 1, safety, visited);
+        let _sub_tt = typetree_from_ty(inner_ty, tcx, depth + 1, safety, visited, span);
         //let tt = TypeTree(
         //    std::iter::repeat(subtt)
         //        .take(*count as usize)
@@ -2944,7 +2993,7 @@ pub fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize, safety: b
         }
         let sub_ty = ty.builtin_index().unwrap();
         //visited.push(sub_ty);
-        let subtt = typetree_from_ty(sub_ty, tcx, depth + 1, safety, visited);
+        let subtt = typetree_from_ty(sub_ty, tcx, depth + 1, safety, visited, span);
 
         // calculate size of subtree
         let param_env_and = ParamEnvAnd { param_env: ParamEnv::empty(), value: sub_ty };
@@ -2965,7 +3014,7 @@ pub fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize, safety: b
     if ty.is_slice() {
         let sub_ty = ty.builtin_index().unwrap();
         //visited.push(sub_ty);
-        let subtt = typetree_from_ty(sub_ty, tcx, depth + 1, safety, visited);
+        let subtt = typetree_from_ty(sub_ty, tcx, depth + 1, safety, visited, span);
 
         visited.pop();
         return subtt;

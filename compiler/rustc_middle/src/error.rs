@@ -18,6 +18,14 @@ pub struct DropCheckOverflow<'tcx> {
 }
 
 #[derive(Diagnostic)]
+#[diag(middle_autodiff_unsafe_inner_const_ref)]
+pub struct AutodiffUnsafeInnerConstRef {
+    #[primary_span]
+    pub span: Span,
+    pub ty: String,
+}
+
+#[derive(Diagnostic)]
 #[diag(middle_opaque_hidden_type_mismatch)]
 pub struct OpaqueHiddenTypeMismatch<'tcx> {
     pub self_ty: Ty<'tcx>,

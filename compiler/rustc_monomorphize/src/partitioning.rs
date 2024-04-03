@@ -1202,7 +1202,8 @@ fn collect_and_partition_mono_items(
             println!("source_id: {:?}", inst.def_id());
             let fn_ty = inst.ty(tcx, ParamEnv::empty());
             assert!(fn_ty.is_fn());
-            let fnc_tree = fnc_typetrees(tcx, fn_ty, &mut input_activities);
+            let span = tcx.def_span(inst.def_id());
+            let fnc_tree = fnc_typetrees(tcx, fn_ty, &mut input_activities, Some(span));
             let (inputs, output) = (fnc_tree.args, fnc_tree.ret);
             //check_types(inst.ty(tcx, ParamEnv::empty()), tcx, &target_attrs.input_activity);
             let symb = symbol_name_for_instance_in_crate(tcx, inst.clone(), LOCAL_CRATE);
