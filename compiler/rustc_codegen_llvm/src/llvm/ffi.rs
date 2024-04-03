@@ -850,6 +850,7 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
     ret_diffactivity: DiffActivity,
     input_tts: Vec<TypeTree>,
     output_tt: TypeTree,
+    void_ret: bool,
 ) -> (&Value, Vec<usize>) {
     let ret_activity = cdiffe_from(ret_diffactivity);
     assert!(ret_activity != CDIFFE_TYPE::DFT_OUT_DIFF);
@@ -864,12 +865,18 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
         input_activity.push(act);
     }
 
-    let ret_primary_ret = match ret_activity {
-        CDIFFE_TYPE::DFT_CONSTANT => true,
-        CDIFFE_TYPE::DFT_DUP_ARG => true,
-        CDIFFE_TYPE::DFT_DUP_NONEED => false,
-        _ => panic!("Implementation error in enzyme_rust_forward_diff."),
+    // if we have void ret, this must be false;
+    let ret_primary_ret = if void_ret {
+        false
+    } else {
+        match ret_activity {
+            CDIFFE_TYPE::DFT_CONSTANT => true,
+            CDIFFE_TYPE::DFT_DUP_ARG => true,
+            CDIFFE_TYPE::DFT_DUP_NONEED => false,
+            _ => panic!("Implementation error in enzyme_rust_forward_diff."),
+        }
     };
+    trace!("ret_primary_ret: {}", &ret_primary_ret);
 
     let mut args_tree = input_tts.iter().map(|x| x.inner).collect::<Vec<_>>();
     //let mut args_tree = vec![TypeTree::new().inner; typetree.input_tt.len()];
@@ -897,6 +904,7 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
     for i in &input_activity {
         trace!("input_activity i: {}", &i);
     }
+    trace!("before calling Enzyme");
     let res = EnzymeCreateForwardDiff(
         logic_ref, // Logic
         std::ptr::null(),
@@ -916,7 +924,7 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
         args_uncacheable.len(), // uncacheable arguments
         std::ptr::null_mut(),   // write augmented function to this
     );
-    dbg!(res);
+    trace!("after calling Enzyme");
     (res, vec![])
 }
 
@@ -981,6 +989,7 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
     for i in &input_activity {
         trace!("input_activity i: {}", &i);
     }
+    trace!("before calling Enzyme");
     let res = EnzymeCreatePrimalAndGradient(
         logic_ref, // Logic
         std::ptr::null(),
@@ -1003,7 +1012,7 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
         std::ptr::null_mut(),   // write augmented function to this
         0,
     );
-    dbg!(res);
+    trace!("after calling Enzyme");
     (res, primal_sizes)
 }
 
