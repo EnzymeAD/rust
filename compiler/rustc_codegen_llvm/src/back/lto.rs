@@ -618,7 +618,9 @@ pub(crate) fn run_pass_manager(
         let opt_level = config.opt_level.unwrap_or(config::OptLevel::No);
         // We will run this again with different values in the context of automatic differentiation.
         let first_run = true;
-        write::llvm_optimize(cgcx, dcx, module, config, opt_level, opt_stage, first_run)?;
+        let noop = false;
+        dbg!("running llvm pm opt pipeline");
+        write::llvm_optimize(cgcx, dcx, module, config, opt_level, opt_stage, first_run, noop)?;
     }
     debug!("lto done");
     Ok(())

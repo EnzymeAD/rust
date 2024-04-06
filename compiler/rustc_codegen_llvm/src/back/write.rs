@@ -550,7 +550,11 @@ pub(crate) unsafe fn llvm_optimize(
     opt_level: config::OptLevel,
     opt_stage: llvm::OptStage,
     first_run: bool,
+    noop: bool,
 ) -> Result<(), FatalError> {
+    if noop {
+        return Ok(());
+    }
     // Enzyme:
     // We want to simplify / optimize functions before AD.
     // However, benchmarks show that optimizations increasing the code size
@@ -724,6 +728,13 @@ unsafe fn create_call<'a>(tgt: &'a Value, src: &'a Value, rev_mode: bool,
     let last_inst = LLVMRustGetLastInstruction(bb).unwrap();
     LLVMPositionBuilderAtEnd(builder, bb);
 
+    let safety_run_checks;
+    if std::env::var("ENZYME_NO_SAFETY_CHECKS").is_ok() {
+        safety_run_checks = false;
+    } else {
+        safety_run_checks = true;
+    }
+
     if inner_param_num == outer_param_num {
         call_args = outer_args;
     } else {
@@ -763,14 +774,18 @@ unsafe fn create_call<'a>(tgt: &'a Value, src: &'a Value, rev_mode: bool,
                 outer_pos += 3;
                 inner_pos += 2;
 
-                // Now we assert if int1 <= int2
-                let res = LLVMBuildICmp(
-                    builder,
-                    IntPredicate::IntULE as u32,
-                    outer_arg,
-                    next2_outer_arg,
-                    "safety_check".as_ptr() as *const c_char);
-                safety_vals.push(res);
+
+                if safety_run_checks {
+
+                    // Now we assert if int1 <= int2
+                    let res = LLVMBuildICmp(
+                        builder,
+                        IntPredicate::IntULE as u32,
+                        outer_arg,
+                        next2_outer_arg,
+                        "safety_check".as_ptr() as *const c_char);
+                    safety_vals.push(res);
+                }
             }
         }
     }
@@ -782,17 +797,18 @@ unsafe fn create_call<'a>(tgt: &'a Value, src: &'a Value, rev_mode: bool,
     // Now add the safety checks.
     if !safety_vals.is_empty() {
         dbg!("Adding safety checks");
+        assert!(safety_run_checks);
         // first we create one bb per check and two more for the fail and success case.
         let fail_bb = LLVMAppendBasicBlockInContext(llcx, tgt, "ad_safety_fail".as_ptr() as *const c_char);
         let success_bb = LLVMAppendBasicBlockInContext(llcx, tgt, "ad_safety_success".as_ptr() as *const c_char);
-        let mut err_bb = vec![];
-        for i in 0..safety_vals.len() {
-            let name: String = format!("ad_safety_err_{}", i);
-            err_bb.push(LLVMAppendBasicBlockInContext(llcx, tgt, name.as_ptr() as *const c_char));
-        }
-        for (i, &val) in safety_vals.iter().enumerate() {
-            LLVMBuildCondBr(builder, val, err_bb[i], fail_bb);
-            LLVMPositionBuilderAtEnd(builder, err_bb[i]);
+        for i in 1..safety_vals.len() {
+            // 'or' all safety checks together
+            // Doing some binary tree style or'ing here would be more efficient,
+            // but I assume LLVM will opt it anyway
+            let prev = safety_vals[i - 1];
+            let curr = safety_vals[i];
+            let res = llvm::LLVMBuildOr(builder, prev, curr, "safety_check".as_ptr() as *const c_char);
+            safety_vals[i] = res;
         }
         LLVMBuildCondBr(builder, safety_vals.last().unwrap(), success_bb, fail_bb);
         LLVMPositionBuilderAtEnd(builder, fail_bb);
@@ -1194,7 +1210,31 @@ pub(crate) unsafe fn differentiate(
                 // disables vectorization and loop unrolling
                 first_run = true;
             }
-            llvm_optimize(cgcx, &diag_handler, module, config, opt_level, opt_stage, first_run)?;
+            if std::env::var("ENZYME_ALT_PIPELINE").is_ok() {
+                dbg!("Running first postAD optimization");
+                first_run = true;
+            }
+            let noop = false;
+            llvm_optimize(cgcx, &diag_handler, module, config, opt_level, opt_stage, first_run, noop)?;
+        }
+        if std::env::var("ENZYME_ALT_PIPELINE").is_ok() {
+            dbg!("Running Second postAD optimization");
+            if let Some(opt_level) = config.opt_level {
+                let opt_stage = match cgcx.lto {
+                    Lto::Fat => llvm::OptStage::PreLinkFatLTO,
+                    Lto::Thin | Lto::ThinLocal => llvm::OptStage::PreLinkThinLTO,
+                    _ if cgcx.opts.cg.linker_plugin_lto.enabled() => llvm::OptStage::PreLinkThinLTO,
+                    _ => llvm::OptStage::PreLinkNoLTO,
+                };
+                let mut first_run = false;
+                dbg!("Running Module Optimization after differentiation");
+                if std::env::var("ENZYME_NO_VEC_UNROLL").is_ok() {
+                    // enables vectorization and loop unrolling
+                    first_run = false;
+                }
+                let noop = false;
+                llvm_optimize(cgcx, &diag_handler, module, config, opt_level, opt_stage, first_run, noop)?;
+            }
         }
     }
 
@@ -1278,7 +1318,14 @@ pub(crate) unsafe fn optimize(
         };
         // Second run only relevant for AD
         let first_run = true;
-        return llvm_optimize(cgcx, dcx, module, config, opt_level, opt_stage, first_run);
+        let noop;
+        if std::env::var("ENZYME_ALT_PIPELINE").is_ok() {
+            noop = true;
+            dbg!("Skipping PreAD optimization");
+        } else {
+            noop = false;
+        }
+        return llvm_optimize(cgcx, dcx, module, config, opt_level, opt_stage, first_run, noop);
     }
     Ok(())
 }
