@@ -24,6 +24,7 @@ jobs:
       - name: Checkout Rust source
         uses: actions/checkout@v4
         with:
+          submodules: true # check out all submodules so the cache can work correctly
           fetch-depth: 2
       - uses: dtolnay/rust-toolchain@nightly
       - name: Get LLVM commit hash
