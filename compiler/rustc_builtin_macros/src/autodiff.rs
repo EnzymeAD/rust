@@ -19,6 +19,8 @@ use std::string::String;
 use thin_vec::{thin_vec, ThinVec};
 use std::str::FromStr;
 
+use rustc_ast::AssocItemKind;
+
 #[cfg(not(llvm_enzyme))]
 pub fn expand(
     ecx: &mut ExtCtxt<'_>,
@@ -77,14 +79,59 @@ pub fn from_ast(ecx: &mut ExtCtxt<'_>, meta_item: &ThinVec<NestedMetaItem>, has_
     AutoDiffAttrs { mode, ret_activity: *ret_activity, input_activity: input_activity.to_vec() }
 }
 
-#[cfg(llvm_enzyme)]
+//#[cfg(llvm_enzyme)]
 pub fn expand(
     ecx: &mut ExtCtxt<'_>,
     expand_span: Span,
     meta_item: &ast::MetaItem,
-    item: Annotatable,
+    mut item: Annotatable,
 ) -> Vec<Annotatable> {
     //check_builtin_macro_attribute(ecx, meta_item, sym::alloc_error_handler);
+
+    // first get the annotable item:
+    let (sig, is_impl): (FnSig, bool) = match &item {
+        Annotatable::Item(ref iitem) => {
+            let (sig, _self_ty) = match &iitem.kind {
+                ItemKind::Fn(box ast::Fn { sig, .. }) => (sig, None),
+                ItemKind::Impl(box ast::Impl { items, self_ty, .. }) => {//, self_ty
+                    assert!(items.len() == 1);
+                    let sig = match &items[0].kind {
+                        ast::AssocItemKind::Fn(box ast::Fn { sig, .. }) => sig,
+                        _ => {
+                            ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
+                            return vec![item];
+                        }
+                    };
+                    (sig, Some(self_ty.clone()))
+                }
+                _ => {
+                    ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
+                    return vec![item];
+                }
+            };
+            (sig.clone(), false)
+        },
+        Annotatable::ImplItem(ref assoc_item) => {
+            let sig = match &assoc_item.kind {
+                ast::AssocItemKind::Fn(box ast::Fn { sig, .. }) => sig,
+                _ => {
+                    ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
+                    return vec![item];
+                }
+            };
+            (sig.clone(), true)
+        },
+        _ => {
+            dbg!(&item);
+            ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
+            return vec![item];
+        }
+    };
+    //attrs
+    dbg!(&sig);
+    //if self_ty.is_some() {
+    //    dbg!(&self_ty);
+    //}
 
     let meta_item_vec: ThinVec<NestedMetaItem> = match meta_item.kind {
         ast::MetaItemKind::List(ref vec) => vec.clone(),
@@ -93,19 +140,44 @@ pub fn expand(
             return vec![item];
         }
     };
-    // Allow using `#[autodiff(...)]` only on a Fn
-    let (has_ret, sig, sig_span) = if let Annotatable::Item(item) = &item
-        && let ItemKind::Fn(box ast::Fn { sig, .. }) = &item.kind
-    {
-        (sig.decl.output.has_ret(), sig, ecx.with_call_site_ctxt(sig.span))
-    } else {
-        ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
-        return vec![item];
-    };
 
-    // Now we know that item is a Item::Fn
-    let mut orig_item: P<ast::Item> = item.clone().expect_item();
-    let primal = orig_item.ident.clone();
+    let has_ret = sig.decl.output.has_ret();
+    let sig_span = ecx.with_call_site_ctxt(sig.span);
+
+    let vis = match &item {
+        Annotatable::Item(ref iitem) => {
+            iitem.vis.clone()
+        },
+        Annotatable::ImplItem(ref assoc_item) => {
+            assoc_item.vis.clone()
+        },
+        _ => {
+            ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
+            return vec![item];
+        }
+    };
+    let primal = match &item {
+        Annotatable::Item(ref iitem) => {
+            iitem.ident.clone()
+        },
+        Annotatable::ImplItem(ref assoc_item) => {
+            assoc_item.ident.clone()
+        },
+        _ => {
+            ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
+            return vec![item];
+        }
+    };
+    //let true_self_ty: Option<ast::Ty> = match &item {
+    //    Annotatable::ImplItem(ref assoc_item) => {
+    //        assoc_item.self_ty.clone()
+    //    },
+    //    _ => {
+    //        None
+    //    }
+    //};
+    dbg!(&vis);
+    dbg!(&item);
 
     // create TokenStream from vec elemtents:
     // meta_item doesn't have a .tokens field
@@ -126,6 +198,7 @@ pub fn expand(
     let ts: TokenStream = TokenStream::from_iter(ts);
 
     let x: AutoDiffAttrs = from_ast(ecx, &meta_item_vec, has_ret);
+    dbg!("after 190");
     if !x.is_active() {
         // We encountered an error, so we return the original item.
         // This allows us to potentially parse other attributes.
@@ -154,12 +227,12 @@ pub fn expand(
     let d_ident = first_ident(&meta_item_vec[0]);
 
     // The first element of it is the name of the function to be generated
-    let asdf = ItemKind::Fn(Box::new(ast::Fn {
+    let asdf = Box::new(ast::Fn {
         defaultness: ast::Defaultness::Final,
         sig: d_sig,
         generics: Generics::default(),
         body: Some(d_body),
-    }));
+    });
     let mut rustc_ad_attr =
         P(ast::NormalAttr::from_ident(Ident::with_dummy_span(sym::rustc_autodiff)));
     let ts2: Vec<TokenTree> = vec![
@@ -195,13 +268,6 @@ pub fn expand(
         style: ast::AttrStyle::Outer,
         span,
     };
-    // don't add it multiple times:
-    if !orig_item.attrs.iter().any(|a| a.id == attr.id) {
-        orig_item.attrs.push(attr.clone());
-    }
-    if !orig_item.attrs.iter().any(|a| a.id == inline_never.id) {
-        orig_item.attrs.push(inline_never);
-    }
 
     // Now update for d_fn
     rustc_ad_attr.item.args = rustc_ast::AttrArgs::Delimited(rustc_ast::DelimArgs {
@@ -210,13 +276,52 @@ pub fn expand(
         tokens: ts,
     });
     attr.kind = ast::AttrKind::Normal(rustc_ad_attr);
-    let mut d_fn = ecx.item(span, d_ident, thin_vec![attr], asdf);
 
-    // Copy visibility from original function
-    d_fn.vis = orig_item.vis.clone();
+    // Don't add it multiple times:
+    let orig_annotatable: Annotatable = match item {
+        Annotatable::Item(ref mut iitem) => {
+            if !iitem.attrs.iter().any(|a| a.id == attr.id) {
+                iitem.attrs.push(attr.clone());
+            }
+            if !iitem.attrs.iter().any(|a| a.id == inline_never.id) {
+                iitem.attrs.push(inline_never.clone());
+            }
+            Annotatable::Item(iitem.clone())
+        },
+        Annotatable::ImplItem(ref mut assoc_item) => {
+            if !assoc_item.attrs.iter().any(|a| a.id == attr.id) {
+                assoc_item.attrs.push(attr.clone());
+            }
+            if !assoc_item.attrs.iter().any(|a| a.id == inline_never.id) {
+                assoc_item.attrs.push(inline_never.clone());
+            }
+            Annotatable::ImplItem(assoc_item.clone())
+        },
+        _ => {
+            panic!("not supported");
+        }
+    };
 
-    let orig_annotatable = Annotatable::Item(orig_item);
-    let d_annotatable = Annotatable::Item(d_fn);
+    let d_annotatable = if is_impl {
+        let assoc_item: AssocItemKind = ast::AssocItemKind::Fn(asdf);
+        let d_fn = P(ast::AssocItem {
+            attrs: thin_vec![attr.clone(), inline_never],
+            id: ast::DUMMY_NODE_ID,
+            span,
+            vis,
+            ident: d_ident,
+            kind: assoc_item,
+            tokens: None,
+        });
+        Annotatable::ImplItem(d_fn)
+    } else {
+        let mut d_fn = ecx.item(span, d_ident, thin_vec![attr.clone()], ItemKind::Fn(asdf));
+        d_fn.vis = vis;
+        Annotatable::Item(d_fn)
+    };
+    //trace!("Generated function: {:?}", d_fn);
+    dbg!("before 2 return");
+
     return vec![orig_annotatable, d_annotatable];
 }
 
@@ -244,7 +349,7 @@ fn assure_mut_ref(ty: &ast::Ty) -> ast::Ty {
 // The second will just take a tuple containing the new arguments.
 // This way we surpress rustc from optimizing any argument away.
 // The last line will 'loop {}', to match the return type of the new function
-#[cfg(llvm_enzyme)]
+//#[cfg(llvm_enzyme)]
 fn gen_enzyme_body(
     ecx: &ExtCtxt<'_>,
     x: &AutoDiffAttrs,
@@ -415,7 +520,7 @@ fn gen_primal_call(
 // zero-initialized by Enzyme). Active arguments are not handled yet.
 // Each argument of the primal function (and the return type if existing) must be annotated with an
 // activity.
-#[cfg(llvm_enzyme)]
+//#[cfg(llvm_enzyme)]
 fn gen_enzyme_decl(
     ecx: &ExtCtxt<'_>,
     sig: &ast::FnSig,
@@ -504,6 +609,12 @@ fn gen_enzyme_decl(
         } else {
             panic!("not an ident?");
         }
+    }
+
+    // If we have a trait method, arg 0 and 1 will be of type self.
+    // In that case look up the true (non-self) type and replace self with it.
+    if sig.decl.has_self() {
+
     }
 
     // If we return a scalar in the primal and the scalar is active,
