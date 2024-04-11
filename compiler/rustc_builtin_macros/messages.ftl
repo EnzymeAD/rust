@@ -5,6 +5,7 @@ builtin_macros_autodiff_unknown_activity = did not recognize activity {$act}
 builtin_macros_autodiff = autodiff must be applied to function
 builtin_macros_autodiff_not_build = this rustc version does not support autodiff
 builtin_macros_autodiff_mode_activity = {$act} can not be used in {$mode} Mode
+builtin_macros_autodiff_number_activities = expected {$expected} activities, but found {$found}
 builtin_macros_autodiff_mode = unknown Mode: `{$mode}`. Use `Forward` or `Reverse`
 builtin_macros_autodiff_ty_activity = {$act} can not be used for this type
 

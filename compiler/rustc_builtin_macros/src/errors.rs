@@ -177,7 +177,14 @@ pub(crate) struct AutoDiffInvalidTypeForActivity {
     pub(crate) span: Span,
     pub(crate) act: String,
 }
-
+#[derive(Diagnostic)]
+#[diag(builtin_macros_autodiff_number_activities)]
+pub(crate) struct AutoDiffInvalidNumberActivities {
+    #[primary_span]
+    pub(crate) span: Span,
+    pub(crate) expected: usize,
+    pub(crate) found: usize,
+}
 #[derive(Diagnostic)]
 #[diag(builtin_macros_autodiff_mode_activity)]
 pub(crate) struct AutoDiffInvalidApplicationModeAct {

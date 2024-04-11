@@ -493,6 +493,15 @@ fn gen_enzyme_decl(
     x: &AutoDiffAttrs,
     span: Span,
 ) -> (ast::FnSig, Vec<String>, Vec<Ident>) {
+    let sig_args = sig.decl.inputs.len() + if sig.decl.output.has_ret() { 1 } else { 0 };
+    let num_activities = x.input_activity.len() + if x.has_ret_activity() { 1 } else { 0 };
+    if sig_args != num_activities {
+        ecx.sess.dcx().emit_fatal(errors::AutoDiffInvalidNumberActivities {
+            span,
+            expected: sig_args,
+            found: num_activities,
+        });
+    }
     assert!(sig.decl.inputs.len() == x.input_activity.len());
     assert!(sig.decl.output.has_ret() == x.has_ret_activity());
     let mut d_decl = sig.decl.clone();
