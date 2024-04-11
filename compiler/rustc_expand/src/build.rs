@@ -287,6 +287,10 @@ impl<'a> ExtCtxt<'a> {
         self.expr(sp, ast::ExprKind::Paren(e))
     }
 
+    pub fn expr_method_call(&self, span: Span, expr: P<ast::Expr>, ident: Ident, args: ThinVec<P<ast::Expr>>) -> P<ast::Expr> {
+        let seg = ast::PathSegment::from_ident(ident);
+        self.expr(span, ast::ExprKind::MethodCall(Box::new(ast::MethodCall { seg, receiver: expr, args, span })))
+    }
     pub fn expr_call(
         &self,
         span: Span,

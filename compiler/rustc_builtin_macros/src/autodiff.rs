@@ -79,7 +79,7 @@ pub fn from_ast(ecx: &mut ExtCtxt<'_>, meta_item: &ThinVec<NestedMetaItem>, has_
     AutoDiffAttrs { mode, ret_activity: *ret_activity, input_activity: input_activity.to_vec() }
 }
 
-//#[cfg(llvm_enzyme)]
+#[cfg(llvm_enzyme)]
 pub fn expand(
     ecx: &mut ExtCtxt<'_>,
     expand_span: Span,
@@ -91,19 +91,8 @@ pub fn expand(
     // first get the annotable item:
     let (sig, is_impl): (FnSig, bool) = match &item {
         Annotatable::Item(ref iitem) => {
-            let (sig, _self_ty) = match &iitem.kind {
-                ItemKind::Fn(box ast::Fn { sig, .. }) => (sig, None),
-                ItemKind::Impl(box ast::Impl { items, self_ty, .. }) => {//, self_ty
-                    assert!(items.len() == 1);
-                    let sig = match &items[0].kind {
-                        ast::AssocItemKind::Fn(box ast::Fn { sig, .. }) => sig,
-                        _ => {
-                            ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
-                            return vec![item];
-                        }
-                    };
-                    (sig, Some(self_ty.clone()))
-                }
+            let sig = match &iitem.kind {
+                ItemKind::Fn(box ast::Fn { sig, .. }) => sig,
                 _ => {
                     ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
                     return vec![item];
@@ -127,11 +116,6 @@ pub fn expand(
             return vec![item];
         }
     };
-    //attrs
-    dbg!(&sig);
-    //if self_ty.is_some() {
-    //    dbg!(&self_ty);
-    //}
 
     let meta_item_vec: ThinVec<NestedMetaItem> = match meta_item.kind {
         ast::MetaItemKind::List(ref vec) => vec.clone(),
@@ -144,40 +128,18 @@ pub fn expand(
     let has_ret = sig.decl.output.has_ret();
     let sig_span = ecx.with_call_site_ctxt(sig.span);
 
-    let vis = match &item {
+    let (vis, primal) = match &item {
         Annotatable::Item(ref iitem) => {
-            iitem.vis.clone()
+            (iitem.vis.clone(), iitem.ident.clone())
         },
         Annotatable::ImplItem(ref assoc_item) => {
-            assoc_item.vis.clone()
+            (assoc_item.vis.clone(), assoc_item.ident.clone())
         },
         _ => {
             ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
             return vec![item];
         }
     };
-    let primal = match &item {
-        Annotatable::Item(ref iitem) => {
-            iitem.ident.clone()
-        },
-        Annotatable::ImplItem(ref assoc_item) => {
-            assoc_item.ident.clone()
-        },
-        _ => {
-            ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
-            return vec![item];
-        }
-    };
-    //let true_self_ty: Option<ast::Ty> = match &item {
-    //    Annotatable::ImplItem(ref assoc_item) => {
-    //        assoc_item.self_ty.clone()
-    //    },
-    //    _ => {
-    //        None
-    //    }
-    //};
-    dbg!(&vis);
-    dbg!(&item);
 
     // create TokenStream from vec elemtents:
     // meta_item doesn't have a .tokens field
@@ -198,7 +160,6 @@ pub fn expand(
     let ts: TokenStream = TokenStream::from_iter(ts);
 
     let x: AutoDiffAttrs = from_ast(ecx, &meta_item_vec, has_ret);
-    dbg!("after 190");
     if !x.is_active() {
         // We encountered an error, so we return the original item.
         // This allows us to potentially parse other attributes.
@@ -319,8 +280,7 @@ pub fn expand(
         d_fn.vis = vis;
         Annotatable::Item(d_fn)
     };
-    //trace!("Generated function: {:?}", d_fn);
-    dbg!("before 2 return");
+    trace!("Generated function: {:?}", d_annotatable);
 
     return vec![orig_annotatable, d_annotatable];
 }
@@ -349,7 +309,7 @@ fn assure_mut_ref(ty: &ast::Ty) -> ast::Ty {
 // The second will just take a tuple containing the new arguments.
 // This way we surpress rustc from optimizing any argument away.
 // The last line will 'loop {}', to match the return type of the new function
-//#[cfg(llvm_enzyme)]
+#[cfg(llvm_enzyme)]
 fn gen_enzyme_body(
     ecx: &ExtCtxt<'_>,
     x: &AutoDiffAttrs,
@@ -508,10 +468,16 @@ fn gen_primal_call(
     primal: Ident,
     idents: Vec<Ident>,
 ) -> P<ast::Expr> {
-    let primal_call_expr = ecx.expr_path(ecx.path_ident(span, primal));
-    let args = idents.iter().map(|arg| ecx.expr_path(ecx.path_ident(span, *arg))).collect();
-    let primal_call = ecx.expr_call(span, primal_call_expr, args);
-    primal_call
+    let has_self = idents.len() > 0 && idents[0].name == kw::SelfLower;
+    if has_self {
+        let args: ThinVec<_> = idents[1..].iter().map(|arg| ecx.expr_path(ecx.path_ident(span, *arg))).collect();
+        let self_expr = ecx.expr_self(span);
+        ecx.expr_method_call(span, self_expr, primal, args.clone())
+    } else {
+        let args: ThinVec<_> = idents.iter().map(|arg| ecx.expr_path(ecx.path_ident(span, *arg))).collect();
+        let primal_call_expr = ecx.expr_path(ecx.path_ident(span, primal));
+        ecx.expr_call(span, primal_call_expr, args)
+    }
 }
 
 // Generate the new function declaration. Const arguments are kept as is. Duplicated arguments must
@@ -520,7 +486,7 @@ fn gen_primal_call(
 // zero-initialized by Enzyme). Active arguments are not handled yet.
 // Each argument of the primal function (and the return type if existing) must be annotated with an
 // activity.
-//#[cfg(llvm_enzyme)]
+#[cfg(llvm_enzyme)]
 fn gen_enzyme_decl(
     ecx: &ExtCtxt<'_>,
     sig: &ast::FnSig,
@@ -532,7 +498,6 @@ fn gen_enzyme_decl(
     let mut d_decl = sig.decl.clone();
     let mut d_inputs = Vec::new();
     let mut new_inputs = Vec::new();
-    //let mut old_names = Vec::new();
     let mut idents = Vec::new();
     let mut act_ret = ThinVec::new();
     for (arg, activity) in sig.decl.inputs.iter().zip(x.input_activity.iter()) {
@@ -609,12 +574,6 @@ fn gen_enzyme_decl(
         } else {
             panic!("not an ident?");
         }
-    }
-
-    // If we have a trait method, arg 0 and 1 will be of type self.
-    // In that case look up the true (non-self) type and replace self with it.
-    if sig.decl.has_self() {
-
     }
 
     // If we return a scalar in the primal and the scalar is active,
