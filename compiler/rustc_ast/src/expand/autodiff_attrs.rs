@@ -167,6 +167,7 @@ impl FromStr for DiffActivity {
         match s {
             "None" => Ok(DiffActivity::None),
             "Active" => Ok(DiffActivity::Active),
+            "ActiveOnly" => Ok(DiffActivity::ActiveOnly),
             "Const" => Ok(DiffActivity::Const),
             "Dual" => Ok(DiffActivity::Dual),
             "DualOnly" => Ok(DiffActivity::DualOnly),
@@ -190,6 +191,12 @@ impl AutoDiffAttrs {
         match self.ret_activity {
             DiffActivity::None => false,
             _ => true,
+        }
+    }
+    pub fn has_active_only_ret(&self) -> bool {
+        match self.ret_activity {
+            DiffActivity::ActiveOnly => true,
+            _ => false,
         }
     }
 }

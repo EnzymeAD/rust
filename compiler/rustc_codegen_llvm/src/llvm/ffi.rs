@@ -940,6 +940,7 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
     let (primary_ret, ret_activity) = match ret_activity {
         DiffActivity::Const => (true, CDIFFE_TYPE::DFT_CONSTANT),
         DiffActivity::Active => (true, CDIFFE_TYPE::DFT_OUT_DIFF),
+        DiffActivity::ActiveOnly => (false, CDIFFE_TYPE::DFT_OUT_DIFF),
         DiffActivity::None => (false, CDIFFE_TYPE::DFT_CONSTANT),
         _ => panic!("Invalid return activity"),
     };

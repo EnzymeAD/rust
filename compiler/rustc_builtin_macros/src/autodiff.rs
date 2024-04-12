@@ -111,7 +111,6 @@ pub fn expand(
             (sig.clone(), true)
         },
         _ => {
-            dbg!(&item);
             ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
             return vec![item];
         }
@@ -280,7 +279,6 @@ pub fn expand(
         d_fn.vis = vis;
         Annotatable::Item(d_fn)
     };
-    trace!("Generated function: {:?}", d_annotatable);
 
     return vec![orig_annotatable, d_annotatable];
 }
@@ -371,7 +369,9 @@ fn gen_enzyme_body(
         return body;
     }
 
-    let primal_ret = sig.decl.output.has_ret();
+    // having an active-only return means we'll drop the original return type.
+    // So that can be treated identical to not having one in the first place.
+    let primal_ret = sig.decl.output.has_ret() && !x.has_active_only_ret();
 
     if primal_ret && n_active == 0 && is_rev(x.mode) {
         // We only have the primal ret.
@@ -405,15 +405,25 @@ fn gen_enzyme_body(
 
     // Now construct default placeholder for each active float.
     // Is there something nicer than f32::default() and f64::default()?
-    let mut d_ret_ty = match d_sig.decl.output {
+    let d_ret_ty = match d_sig.decl.output {
         FnRetTy::Ty(ref ty) => ty.clone(),
         FnRetTy::Default(span) => {
             panic!("Did not expect Default ret ty: {:?}", span);
         }
     };
-    let mut d_ret_ty = match d_ret_ty.kind {
-        TyKind::Tup(ref mut tys) => {
+    let mut d_ret_ty = match d_ret_ty.kind.clone() {
+        TyKind::Tup(ref tys) => {
             tys.clone()
+        }
+        TyKind::Path(_, rustc_ast::Path { segments, .. }) => {
+            if segments.len() == 1 && segments[0].args.is_none() {
+                let id = vec![segments[0].ident];
+                let kind = TyKind::Path(None, ecx.path(span, id));
+                let ty = P(rustc_ast::Ty { kind, id: ast::DUMMY_NODE_ID, span, tokens: None });
+                thin_vec![ty]
+            } else {
+                panic!("Expected tuple or simple path return type");
+            }
         }
         _ => {
             // We messed up construction of d_sig
@@ -585,33 +595,41 @@ fn gen_enzyme_decl(
         }
     }
 
+    let active_only_ret = x.ret_activity == DiffActivity::ActiveOnly;
+    if active_only_ret {
+        assert!(is_rev(x.mode));
+    }
+
     // If we return a scalar in the primal and the scalar is active,
     // then add it as last arg to the inputs.
     if is_rev(x.mode) {
-        if let DiffActivity::Active = x.ret_activity {
-            let ty = match d_decl.output {
-                FnRetTy::Ty(ref ty) => ty.clone(),
-                FnRetTy::Default(span) => {
-                    panic!("Did not expect Default ret ty: {:?}", span);
-                }
-            };
-            let name = "dret".to_string();
-            let ident = Ident::from_str_and_span(&name, ty.span);
-            let shadow_arg = ast::Param {
-                attrs: ThinVec::new(),
-                ty: ty.clone(),
-                pat: P(ast::Pat {
+        match x.ret_activity {
+            DiffActivity::Active | DiffActivity::ActiveOnly => {
+                let ty = match d_decl.output {
+                    FnRetTy::Ty(ref ty) => ty.clone(),
+                    FnRetTy::Default(span) => {
+                        panic!("Did not expect Default ret ty: {:?}", span);
+                    }
+                };
+                let name = "dret".to_string();
+                let ident = Ident::from_str_and_span(&name, ty.span);
+                let shadow_arg = ast::Param {
+                    attrs: ThinVec::new(),
+                    ty: ty.clone(),
+                    pat: P(ast::Pat {
+                        id: ast::DUMMY_NODE_ID,
+                        kind: PatKind::Ident(BindingAnnotation::NONE, ident, None),
+                        span: ty.span,
+                        tokens: None,
+                    }),
                     id: ast::DUMMY_NODE_ID,
-                    kind: PatKind::Ident(BindingAnnotation::NONE, ident, None),
                     span: ty.span,
-                    tokens: None,
-                }),
-                id: ast::DUMMY_NODE_ID,
-                span: ty.span,
-                is_placeholder: false,
-            };
-            d_inputs.push(shadow_arg);
-            new_inputs.push(name);
+                    is_placeholder: false,
+                };
+                d_inputs.push(shadow_arg);
+                new_inputs.push(name);
+            }
+            _ => {}
         }
     }
     d_decl.inputs = d_inputs.into();
@@ -630,7 +648,21 @@ fn gen_enzyme_decl(
             let ty = P(rustc_ast::Ty { kind, id: ty.id, span: ty.span, tokens: None });
             d_decl.output = FnRetTy::Ty(ty);
         }
+        if let DiffActivity::DualOnly = x.ret_activity {
+            // No need to change the return type,
+            // we will just return the shadow in place
+            // of the primal return.
+        }
     }
+
+    // If we use ActiveOnly, drop the original return value.
+    d_decl.output = if active_only_ret {
+        FnRetTy::Default(span)
+    } else {
+        d_decl.output.clone()
+    };
+
+    trace!("act_ret: {:?}", act_ret);
 
     // If we have an active input scalar, add it's gradient to the
     // return type. This might require changing the return type to a
@@ -638,7 +670,9 @@ fn gen_enzyme_decl(
     if act_ret.len() > 0 {
         let ret_ty = match d_decl.output {
             FnRetTy::Ty(ref ty) => {
-                act_ret.insert(0, ty.clone());
+                if !active_only_ret {
+                    act_ret.insert(0, ty.clone());
+                }
                 let kind = TyKind::Tup(act_ret);
                 P(rustc_ast::Ty { kind, id: ty.id, span: ty.span, tokens: None })
             }
@@ -655,5 +689,6 @@ fn gen_enzyme_decl(
     }
 
     let d_sig = FnSig { header: sig.header.clone(), decl: d_decl, span };
+    trace!("Generated signature: {:?}", d_sig);
     (d_sig, new_inputs, idents)
 }
