@@ -461,12 +461,20 @@ fn gen_enzyme_body(
         };
     }
 
-    let ret_tuple: P<ast::Expr> = ecx.expr_tuple(span, exprs);
-    let ret = ecx.expr_call(new_decl_span, blackbox_call_expr.clone(), thin_vec![ret_tuple]);
-    if d_sig.decl.output.has_ret() {
-        // If we return (), we don't have to match the return type.
-        body.stmts.push(ecx.stmt_expr(ret));
+    let ret : P<ast::Expr>;
+    if exprs.len() > 1 {
+        let ret_tuple: P<ast::Expr> = ecx.expr_tuple(span, exprs);
+        ret = ecx.expr_call(new_decl_span, blackbox_call_expr.clone(), thin_vec![ret_tuple]);
+    } else if exprs.len() == 1 {
+        let ret_scal = exprs.pop().unwrap();
+        ret = ecx.expr_call(new_decl_span, blackbox_call_expr.clone(), thin_vec![ret_scal]);
+    } else {
+        assert!(!d_sig.decl.output.has_ret());
+        // We don't have to match the return type.
+        return body;
     }
+    assert!(d_sig.decl.output.has_ret());
+    body.stmts.push(ecx.stmt_expr(ret));
 
     body
 }

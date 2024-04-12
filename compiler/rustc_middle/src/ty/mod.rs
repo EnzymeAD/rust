@@ -2762,6 +2762,7 @@ pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<Diff
         // We care about safety checks, if an argument get's duplicated and we write into the
         // shadow. That's equivalent to Duplicated or DuplicatedOnly.
         let safety = if !da.is_empty() {
+            assert!(da.len() == x.inputs().len(), "{:?} != {:?}", da.len(), x.inputs().len());
             // If we have Activities, we also have spans
             assert!(span.is_some());
             match da[i] {
