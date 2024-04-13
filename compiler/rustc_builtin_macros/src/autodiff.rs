@@ -229,14 +229,6 @@ pub fn expand(
         span,
     };
 
-    // Now update for d_fn
-    rustc_ad_attr.item.args = rustc_ast::AttrArgs::Delimited(rustc_ast::DelimArgs {
-        dspan: DelimSpan::dummy(),
-        delim: rustc_ast::token::Delimiter::Parenthesis,
-        tokens: ts,
-    });
-    attr.kind = ast::AttrKind::Normal(rustc_ad_attr);
-
     // Don't add it multiple times:
     let orig_annotatable: Annotatable = match item {
         Annotatable::Item(ref mut iitem) => {
@@ -262,6 +254,14 @@ pub fn expand(
         }
     };
 
+    // Now update for d_fn
+    rustc_ad_attr.item.args = rustc_ast::AttrArgs::Delimited(rustc_ast::DelimArgs {
+        dspan: DelimSpan::dummy(),
+        delim: rustc_ast::token::Delimiter::Parenthesis,
+        tokens: ts,
+    });
+    attr.kind = ast::AttrKind::Normal(rustc_ad_attr);
+
     let d_annotatable = if is_impl {
         let assoc_item: AssocItemKind = ast::AssocItemKind::Fn(asdf);
         let d_fn = P(ast::AssocItem {
@@ -275,7 +275,7 @@ pub fn expand(
         });
         Annotatable::ImplItem(d_fn)
     } else {
-        let mut d_fn = ecx.item(span, d_ident, thin_vec![attr.clone()], ItemKind::Fn(asdf));
+        let mut d_fn = ecx.item(span, d_ident, thin_vec![attr.clone(), inline_never], ItemKind::Fn(asdf));
         d_fn.vis = vis;
         Annotatable::Item(d_fn)
     };
