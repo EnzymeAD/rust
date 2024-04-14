@@ -1035,6 +1035,7 @@ extern "C" {
     pub fn LLVMRustEraseInstFromParent(V: &Value);
     pub fn LLVMRustGetTerminator<'a>(B: &BasicBlock) -> &'a Value;
     pub fn LLVMGetReturnType(T: &Type) -> &Type;
+    pub fn LLVMRustIsStructType(T: &Type) -> bool;
     pub fn LLVMDumpModule(M: &Module);
     pub fn LLVMCountStructElementTypes(T: &Type) -> c_uint;
     pub fn LLVMDeleteFunction(V: &Value);

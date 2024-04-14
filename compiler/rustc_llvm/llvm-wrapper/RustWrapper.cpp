@@ -300,6 +300,10 @@ extern "C" void LLVMRustAddFunctionAttributes(LLVMValueRef Fn, unsigned Index,
   AddAttributes(F, Index, Attrs, AttrsLen);
 }
 
+extern "C" bool LLVMRustIsStructType(LLVMTypeRef Ty) {
+  return unwrap(Ty)->isStructTy();
+}
+
 extern "C" void LLVMRustAddCallSiteAttributes(LLVMValueRef Instr,
                                               unsigned Index,
                                               LLVMAttributeRef *Attrs,
