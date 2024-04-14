@@ -860,11 +860,10 @@ unsafe fn create_call<'a>(tgt: &'a Value, src: &'a Value, rev_mode: bool,
     LLVMRustEraseInstBefore(bb, last_inst);
 
     let f_return_type = LLVMGetReturnType(LLVMGlobalGetValueType(src));
-    let t_return_type = LLVMGetReturnType(LLVMGlobalGetValueType(tgt));
-    let t_is_struct: bool = llvm::LLVMRustIsStructType(t_return_type);
+    let f_is_struct = llvm::LLVMRustIsStructType(f_return_type);
     let void_type = LLVMVoidTypeInContext(llcx);
     // Now unwrap the struct_ret if it's actually a struct
-    if t_is_struct && f_return_type != void_type {
+    if f_is_struct {
         let num_elem_in_ret_struct = LLVMCountStructElementTypes(f_return_type);
         if num_elem_in_ret_struct == 1 {
             let inner_grad_name = "foo".to_string();
