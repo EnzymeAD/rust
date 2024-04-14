@@ -840,7 +840,6 @@ unsafe fn create_call<'a>(tgt: &'a Value, src: &'a Value, rev_mode: bool,
         c_inner_fnc_name.as_ptr(),
     );
 
-
     // Add dummy dbg info to our newly generated call, if we have any.
     let inst = LLVMRustgetFirstNonPHIOrDbgOrLifetime(bb).unwrap();
     let md_ty = llvm::LLVMGetMDKindIDInContext(
@@ -863,7 +862,7 @@ unsafe fn create_call<'a>(tgt: &'a Value, src: &'a Value, rev_mode: bool,
     let f_return_type = LLVMGetReturnType(LLVMGlobalGetValueType(src));
     let void_type = LLVMVoidTypeInContext(llcx);
     // Now unwrap the struct_ret if it's actually a struct
-    if rev_mode && f_return_type != void_type {
+    if f_return_type != void_type {
         let num_elem_in_ret_struct = LLVMCountStructElementTypes(f_return_type);
         if num_elem_in_ret_struct == 1 {
             let inner_grad_name = "foo".to_string();
