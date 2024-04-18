@@ -62,4 +62,5 @@ jobs:
       - name: test Enzyme/rustbook
         working-directory: rustbook
         run: |
-          cargo +enzyme test --workspace
+          cargo +enzyme test
+          cargo +enzyme test -p samples-loose-types
