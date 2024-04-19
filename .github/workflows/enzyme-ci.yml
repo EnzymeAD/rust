@@ -63,4 +63,4 @@ jobs:
         working-directory: rustbook
         run: |
           cargo +enzyme test
-          cargo +enzyme test -p samples-loose-types
+          ENZYME_LOOSE_TYPES=1 cargo +enzyme test -p samples-loose-types
