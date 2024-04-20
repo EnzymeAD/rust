@@ -1866,6 +1866,9 @@ pub fn generate_smart_stamp_hash(dir: &Path, additional_input: &str) -> String {
         .map(|o| String::from_utf8(o.stdout).unwrap_or_default())
         .unwrap_or_default();
 
+    eprintln!("Computing stamp for {dir:?}");
+    eprintln!("Diff output: {diff:?}");
+
     let status = Command::new("git")
         .current_dir(dir)
         .arg("status")
@@ -1876,6 +1879,8 @@ pub fn generate_smart_stamp_hash(dir: &Path, additional_input: &str) -> String {
         .map(|o| String::from_utf8(o.stdout).unwrap_or_default())
         .unwrap_or_default();
 
+    eprintln!("Status output: {status:?}");
+    eprintln!("Additional input: {additional_input:?}");
     let mut hasher = sha2::Sha256::new();
 
     hasher.update(diff);
