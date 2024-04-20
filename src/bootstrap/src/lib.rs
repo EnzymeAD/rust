@@ -1887,7 +1887,11 @@ pub fn generate_smart_stamp_hash(dir: &Path, additional_input: &str) -> String {
     hasher.update(status);
     hasher.update(additional_input);
 
-    hex_encode(hasher.finalize().as_slice())
+    let result = hex_encode(hasher.finalize().as_slice());
+
+    eprintln!("Final hash: {result:?}");
+
+    result
 }
 
 /// Ensures that the behavior dump directory is properly initialized.

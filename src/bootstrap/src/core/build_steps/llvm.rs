@@ -1211,7 +1211,12 @@ impl HashStamp {
 
     fn is_done(&self) -> bool {
         match fs::read(&self.path) {
-            Ok(h) => self.hash.as_deref().unwrap_or(b"") == h.as_slice(),
+            Ok(h) => {
+                let unwrapped = self.hash.as_deref().unwrap_or(b"");
+                let res = unwrapped == h.as_slice();
+                eprintln!("Result for {:?}: {res:?} for expected '{unwrapped:?}' and read '{h:?}'", self.path);
+                res
+            },
             Err(e) if e.kind() == io::ErrorKind::NotFound => false,
             Err(e) => {
                 panic!("failed to read stamp file `{}`: {}", self.path.display(), e);
