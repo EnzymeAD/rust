@@ -45,7 +45,7 @@ jobs:
         with:
           path: build/build/x86_64-unknown-linux-gnu/enzyme
           key: ${{ matrix.os }}-enzyme-${{ steps.enzyme-commit.outputs.HEAD }}
-      - name: Cache bootstrap artifacts
+      - name: Cache bootstrap/stage0 artifacts for incremental builds
         uses: actions/cache@v4
         with:
           path: |
@@ -56,9 +56,9 @@ jobs:
             build/build/x86_64-unknown-linux-gnu/stage1-std/
           # Approximate stable hash. It doesn't matter too much when this goes out of sync as it just caches
           # some stage0/stage1 dependencies and stdlibs which *hopefully* are hash-keyed.
-          key: enzyme-rust-bootstrap--${{ runner.os }}-${{ hashFiles('src/**/Cargo.lock') }}
+          key: enzyme-rust-incremental-${{ runner.os }}-${{ hashFiles('src/**/Cargo.lock', 'Cargo.lock') }}
           restore-keys: |
-            enzyme-rust-bootstrap--${{ runner.os }}
+            enzyme-rust-incremental-${{ runner.os }}
       - name: Build
         run: |
           wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
