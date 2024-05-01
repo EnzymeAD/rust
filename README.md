@@ -25,14 +25,10 @@ rustup toolchain link enzyme build/host/stage1
 rustup toolchain install nightly # enables -Z unstable-options
 ```
 
-You can then look at examples in the `library/autodiff/examples/*` folder and run them with
+You can then run an examples from our [docs](https://enzyme.mit.edu/index.fcgi/rust/usage/usage.html) using
 
 ```bash
-# rosenbrock forward iteration
-cargo +enzyme run --example rosenbrock_fwd_iter --release
-
-# or all of them
-cargo +enzyme test --examples
+cargo +enzyme run --release
 ```
 
 ## Enzyme Config
