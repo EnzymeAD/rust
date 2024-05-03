@@ -588,6 +588,8 @@ pub const BUILTIN_ATTRIBUTES: &[BuiltinAttribute] = &[
         IMPL_DETAIL,
     ),
     rustc_attr!(rustc_proc_macro_decls, Normal, template!(Word), WarnFollowing, INTERNAL_UNSTABLE),
+    rustc_attr!(rustc_autodiff, Normal, template!(Word, List: r#""...""#), DuplicatesOk, INTERNAL_UNSTABLE),
+
     rustc_attr!(
         rustc_macro_transparency, Normal,
         template!(NameValueStr: "transparent|semitransparent|opaque"), ErrorFollowing,
