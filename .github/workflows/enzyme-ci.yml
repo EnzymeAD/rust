@@ -27,6 +27,15 @@ jobs:
           submodules: true # check out all submodules so the cache can work correctly
           fetch-depth: 2
       - uses: dtolnay/rust-toolchain@nightly
+      - name: Create cache folders
+        run: |
+          mkdir -p build/build/x86_64-unknown-linux-gnu/llvm
+          mkdir -p build/build/x86_64-unknown-linux-gnu/enzyme
+          mkdir -p build/build/bootstrap/
+          mkdir -p build/build/x86_64-unknown-linux-gnu/stage0-rustc/
+          mkdir -p build/build/x86_64-unknown-linux-gnu/stage0-std/
+          mkdir -p build/build/x86_64-unknown-linux-gnu/stage0-tools/
+          mkdir -p build/build/x86_64-unknown-linux-gnu/stage1-std/
       - name: Get LLVM commit hash
         id: llvm-commit
         run: echo "HEAD=$(git rev-parse HEAD:src/llvm-project)" >> $GITHUB_OUTPUT
