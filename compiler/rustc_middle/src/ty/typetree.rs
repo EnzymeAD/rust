@@ -69,10 +69,11 @@ pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<Diff
             if inner_ty.is_slice() {
                 // We know that the lenght will be passed as extra arg.
                 let child = typetree_from_ty(inner_ty, tcx, 1, safety, &mut visited, span);
-                let tt = Type { offset: -1, kind: Kind::Pointer, size: 8, child };
+                //let tt = Type { offset: -1, kind: Kind::Pointer, size: 8, child };
+                let tt = Type { offset: -1, kind: Kind::FatPointer, size: 2 * 8, child };
                 args.push(TypeTree(vec![tt]));
-                let i64_tt = Type { offset: -1, kind: Kind::Integer, size: 8, child: TypeTree::new() };
-                args.push(TypeTree(vec![i64_tt]));
+                //let i64_tt = Type { offset: -1, kind: Kind::Integer, size: 8, child: TypeTree::new() };
+                //args.push(TypeTree(vec![i64_tt]));
                 if !da.is_empty() {
                     // We are looking at a slice. The length of that slice will become an
                     // extra integer on llvm level. Integers are always const.
@@ -154,22 +155,18 @@ fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize, safety: bool,
 
         //visited.push(inner_ty);
         let child = typetree_from_ty(inner_ty, tcx, depth + 1, safety, visited, span);
-        let tt = Type { offset: -1, kind: Kind::Pointer, size: 8, child };
-
         let mut args = vec![];
 
         // &[T] and &mut [T] are passed as two arguments, the pointer and the length.
-        // TODO: Handle this.
-        //if inner_ty.is_slice() {
-        //    args.push(vec![tt]);
-        //    let i64_tt = Type { offset: -1, kind: Kind::Integer, size: 8, child: TypeTree::new() };
-        //    args.push(vec![i64_tt]);
-        //    trace!("ABI MATCHING!");
-        //} else {
-        //    args.push(vec![tt]);
-        //}
-        //visited.pop();
-        //return TypeTree(args);
+        if inner_ty.is_slice() {
+            let tt = Type { offset: -1, kind: Kind::FatPointer, size: 2 * 8, child };
+            args.push(tt);
+        } else {
+            let tt = Type { offset: -1, kind: Kind::Pointer, size: 8, child };
+            args.push(tt);
+        }
+        visited.pop();
+        return TypeTree(args);
     }
 
 

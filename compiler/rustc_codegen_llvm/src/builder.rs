@@ -146,8 +146,8 @@ fn add_tt<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context,val: &'ll Valu
             .expect("got a non-UTF8 data-layout from LLVM");
     let attr_name = "enzyme_type";
     let c_attr_name = std::ffi::CString::new(attr_name).unwrap();
-    for (i, &ref input) in inputs.iter().enumerate() {
-        let c_tt = to_enzyme_typetree(input.clone(), llvm_data_layout, llcx);
+    let c_tts = to_enzyme_typetree(&inputs, llvm_data_layout, llcx);
+    for (i, c_tt) in c_tts.iter().enumerate() {
         let c_str = unsafe { llvm::EnzymeTypeTreeToString(c_tt.inner) };
         let c_str = unsafe { std::ffi::CStr::from_ptr(c_str) };
         unsafe {
