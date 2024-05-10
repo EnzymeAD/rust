@@ -59,6 +59,8 @@ jobs:
           key: enzyme-rust-incremental-${{ runner.os }}-${{ hashFiles('src/**/Cargo.lock', 'Cargo.lock') }}
           restore-keys: |
             enzyme-rust-incremental-${{ runner.os }}
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
       - name: Build
         run: |
           wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
