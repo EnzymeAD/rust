@@ -1000,9 +1000,12 @@ pub(crate) unsafe fn enzyme_ad(
         std::str::from_utf8(unsafe { CStr::from_ptr(llvm_data_layout) }.to_bytes())
             .expect("got a non-UTF8 data-layout from LLVM");
 
-    let input_tts =
-        item.inputs.into_iter().map(|x| to_enzyme_typetree(x, llvm_data_layout, llcx)).collect();
-    let output_tt = to_enzyme_typetree(item.output, llvm_data_layout, llcx);
+    let input_tts = to_enzyme_typetree(&item.inputs, llvm_data_layout, llcx);
+    //let input_tts =
+    //    item.inputs.into_iter().map(|x| to_enzyme_typetree(x, llvm_data_layout, llcx)).collect();
+    let output_tts = to_enzyme_typetree(&[item.output], llvm_data_layout, llcx);
+    assert!(output_tts.len() == 1);
+    let output_tt = output_tts[0].clone();
 
     let type_analysis: EnzymeTypeAnalysisRef =
         CreateTypeAnalysis(logic_ref, std::ptr::null_mut(), std::ptr::null_mut(), 0);
