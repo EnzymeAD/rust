@@ -1217,7 +1217,10 @@ impl HashStamp {
                 eprintln!("Result for {:?}: {res:?} for expected '{unwrapped:?}' and read '{h:?}'", self.path);
                 res
             },
-            Err(e) if e.kind() == io::ErrorKind::NotFound => false,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                eprintln!("No existing stamp found at {:?}", self.path);
+                false
+            },
             Err(e) => {
                 panic!("failed to read stamp file `{}`: {}", self.path.display(), e);
             }
