@@ -882,6 +882,10 @@ extern "C" void LLVMRustAddParamAttr(LLVMValueRef call, unsigned i,
   }
 }
 
+extern "C" void LLVMRustAddRetAttr() {
+  // add return attribute
+}
+
 extern "C" void LLVMRustDISetInstMetadata(LLVMValueRef Inst,
                                           LLVMMetadataRef Desc) {
   if (auto *I = dyn_cast<Instruction>(unwrap<Value>(Inst))) {
