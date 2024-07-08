@@ -1,8 +1,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_upper_case_globals)]
 
-use crate::llvm::LLVMRustAddParamAttr;
-use crate::llvm::LLVMRustAddRetAttr;
+use crate::llvm::{LLVMRustAddParamAttr, LLVMRustAddRetAttr};
 
 use rustc_ast::expand::autodiff_attrs::DiffActivity;
 
