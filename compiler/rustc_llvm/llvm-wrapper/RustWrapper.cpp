@@ -857,6 +857,21 @@ extern "C" void LLVMRustRemoveFncAttr(LLVMValueRef F,
   }
 }
 
+extern "C" void LLVMRustAddFncParamAttr(LLVMValueRef F, unsigned i,
+                                      LLVMAttributeRef RustAttr) {
+  if (auto *Fn = dyn_cast<Function>(unwrap<Value>(F))) {
+    Fn->addParamAttr(i, unwrap(RustAttr));
+  }
+}
+
+extern "C" void LLVMRustAddRetFncAttr(LLVMValueRef F,
+                                      LLVMRustAttribute RustAttr) {
+  // add return attribute
+  if (auto *Fn = dyn_cast<Function>(unwrap<Value>(F))) {
+    Fn->addRetAttr(fromRust(RustAttr));
+  }
+}
+
 extern "C" LLVMMetadataRef LLVMRustDIGetInstMetadata(LLVMValueRef x) {
   if (auto *I = dyn_cast<Instruction>(unwrap<Value>(x))) {
     // auto *MD = I->getMetadata(LLVMContext::MD_dbg);
@@ -880,10 +895,6 @@ extern "C" void LLVMRustAddParamAttr(LLVMValueRef call, unsigned i,
   if (auto *CI = dyn_cast<CallInst>(unwrap<Value>(call))) {
     CI->addParamAttr(i, unwrap(RustAttr));
   }
-}
-
-extern "C" void LLVMRustAddRetAttr() {
-  // add return attribute
 }
 
 extern "C" void LLVMRustDISetInstMetadata(LLVMValueRef Inst,
