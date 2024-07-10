@@ -3,8 +3,6 @@
 
 use rustc_ast::expand::autodiff_attrs::DiffActivity;
 
-use crate::llvm::{LLVMRustAddFncParamAttr, LLVMRustAddRetAttr};
-
 use super::debuginfo::{
     DIArray, DIBasicType, DIBuilder, DICompositeType, DIDerivedType, DIDescriptor, DIEnumerator,
     DIFile, DIFlags, DIGlobalVariableExpression, DILexicalBlock, DILocation, DINameSpace,
