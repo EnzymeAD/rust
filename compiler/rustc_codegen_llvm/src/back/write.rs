@@ -1106,8 +1106,8 @@ pub(crate) unsafe fn differentiate(
             ret: item.output,
         };
         let name = CString::new(item.source.clone()).unwrap();
-        let fn_def: llvm::Value = llvm::LLVMGetNamedFunction(llmod, name.as_ptr()).unwrap();
-        add_tt2(llmod, llcx, fn_def, tt);
+        let fn_def: &llvm::Value = llvm::LLVMGetNamedFunction(llmod, name.as_ptr()).unwrap();
+        crate::builder::add_tt2(llmod, llcx, fn_def, tt);
     }
 
     if std::env::var("ENZYME_PRINT_MOD_BEFORE").is_ok() {

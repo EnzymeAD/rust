@@ -136,7 +136,7 @@ macro_rules! builder_methods_for_value_instructions {
         })+
     }
 }
-fn add_tt2<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context, fn_def: &'ll Value, tt: FncTree) {
+pub fn add_tt2<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context, fn_def: &'ll Value, tt: FncTree) {
     let inputs = tt.args;
     let ret_tt: TypeTree = tt.ret;
     let llvm_data_layout: *const c_char = unsafe { llvm::LLVMGetDataLayoutStr(&*llmod) };
@@ -176,7 +176,7 @@ fn add_tt2<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context, fn_def: &'ll
         attr
     };
     unsafe {
-        llvm::LLVMRustAddRetAttr(fn_def, ret_attr);
+        llvm::LLVMRustAddRetFncAttr(fn_def, ret_attr);
     }
 }
 
