@@ -1028,7 +1028,7 @@ extern "C" {
         Attr: &'a Attribute
     );
 
-    pub fn LLVMRustAddRetAttr(V: &Value, attr: AttributeKind);
+    pub fn LLVMRustAddRetFncAttr(V: &Value, attr: Attribute);
     pub fn LLVMRustRemoveFncAttr(V: &Value, attr: AttributeKind);
     pub fn LLVMRustHasDbgMetadata(I: &Value) -> bool;
     pub fn LLVMRustHasMetadata(I: &Value, KindID: c_uint) -> bool;

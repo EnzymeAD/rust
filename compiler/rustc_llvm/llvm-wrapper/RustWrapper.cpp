@@ -865,9 +865,9 @@ extern "C" void LLVMRustAddFncParamAttr(LLVMValueRef F, unsigned i,
 }
 
 extern "C" void LLVMRustAddRetFncAttr(LLVMValueRef F,
-                                      LLVMRustAttribute RustAttr) {
+                                      LLVMAttributeRef RustAttr) {
   if (auto *Fn = dyn_cast<Function>(unwrap<Value>(F))) {
-    Fn->addRetAttr(fromRust(RustAttr));
+    Fn->addRetAttr(unwrap(RustAttr));
   }
 }
 
