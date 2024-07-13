@@ -1102,8 +1102,8 @@ pub(crate) unsafe fn differentiate(
         //    item.inputs.iter().map(|x| to_enzyme_typetree(x.clone(), llvm_data_layout, llcx)).collect();
         //let output_tt = to_enzyme_typetree(item.output, llvm_data_layout, llcx);
         let tt: FncTree = FncTree {
-            args: item.inputs,
-            ret: item.output,
+            args: item.inputs.clone(),
+            ret: item.output.clone(),
         };
         let name = CString::new(item.source.clone()).unwrap();
         let fn_def: &llvm::Value = llvm::LLVMGetNamedFunction(llmod, name.as_ptr()).unwrap();

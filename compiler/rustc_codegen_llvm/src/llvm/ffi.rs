@@ -849,7 +849,7 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
     input_diffactivity: Vec<DiffActivity>,
     ret_diffactivity: DiffActivity,
     input_tts: Vec<TypeTree>,
-    output_tt: TypeTree,
+    _output_tt: TypeTree,
     void_ret: bool,
 ) -> (&Value, Vec<usize>) {
     let ret_activity = cdiffe_from(ret_diffactivity);
@@ -878,7 +878,7 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
     };
     trace!("ret_primary_ret: {}", &ret_primary_ret);
 
-    let mut args_tree = input_tts.iter().map(|x| x.inner).collect::<Vec<_>>();
+    //let mut args_tree = input_tts.iter().map(|x| x.inner).collect::<Vec<_>>();
     //let mut args_tree = vec![TypeTree::new().inner; typetree.input_tt.len()];
 
     // We don't support volatile / extern / (global?) values.
@@ -937,7 +937,7 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
     rust_input_activity: Vec<DiffActivity>,
     ret_activity: DiffActivity,
     input_tts: Vec<TypeTree>,
-    output_tt: TypeTree,
+    _output_tt: TypeTree,
 ) -> (&Value, Vec<usize>) {
     let (primary_ret, ret_activity) = match ret_activity {
         DiffActivity::Const => (true, CDIFFE_TYPE::DFT_CONSTANT),
@@ -963,7 +963,7 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
         input_activity.push(cdiffe_from(x));
     }
 
-    let mut args_tree = input_tts.iter().map(|x| x.inner).collect::<Vec<_>>();
+    //let args_tree = input_tts.iter().map(|x| x.inner).collect::<Vec<_>>();
 
     // We don't support volatile / extern / (global?) values.
     // Just because I didn't had time to test them, and it seems less urgent.
@@ -1032,7 +1032,7 @@ extern "C" {
         Attr: &'a Attribute
     );
 
-    pub fn LLVMRustAddRetFncAttr(F: &Value, attr: Attribute);
+    pub fn LLVMRustAddRetFncAttr(F: &Value, attr: &Attribute);
     pub fn LLVMRustRemoveFncAttr(V: &Value, attr: AttributeKind);
     pub fn LLVMRustHasDbgMetadata(I: &Value) -> bool;
     pub fn LLVMRustHasMetadata(I: &Value, KindID: c_uint) -> bool;
