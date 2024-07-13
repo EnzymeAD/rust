@@ -136,6 +136,49 @@ macro_rules! builder_methods_for_value_instructions {
         })+
     }
 }
+fn add_tt2<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context, fn_def: &'ll Value, tt: FncTree) {
+    let inputs = tt.args;
+    let ret_tt: TypeTree = tt.ret;
+    let llvm_data_layout: *const c_char = unsafe { llvm::LLVMGetDataLayoutStr(&*llmod) };
+    let llvm_data_layout =
+        std::str::from_utf8(unsafe { std::ffi::CStr::from_ptr(llvm_data_layout) }.to_bytes())
+            .expect("got a non-UTF8 data-layout from LLVM");
+    let attr_name = "enzyme_type";
+    let c_attr_name = std::ffi::CString::new(attr_name).unwrap();
+    for (i, &ref input) in inputs.iter().enumerate() {
+        let c_tt = to_enzyme_typetree(input.clone(), llvm_data_layout, llcx);
+        let c_str = unsafe { llvm::EnzymeTypeTreeToString(c_tt.inner) };
+        let c_str = unsafe { std::ffi::CStr::from_ptr(c_str) };
+        unsafe {
+            let attr = llvm::LLVMCreateStringAttribute(
+                llcx,
+                c_attr_name.as_ptr(),
+                c_attr_name.as_bytes().len() as c_uint,
+                c_str.as_ptr(),
+                c_str.to_bytes().len() as c_uint,
+            );
+            llvm::LLVMRustAddFncParamAttr(fn_def, i as u32, attr);
+        }
+        unsafe { llvm::EnzymeTypeTreeToStringFree(c_str.as_ptr()) };
+    }
+    let ret_attr = unsafe {
+        let c_tt = to_enzyme_typetree(ret_tt, llvm_data_layout, llcx);
+        let c_str = llvm::EnzymeTypeTreeToString(c_tt.inner);
+        let c_str = std::ffi::CStr::from_ptr(c_str);
+        let attr = llvm::LLVMCreateStringAttribute(
+            llcx,
+            c_attr_name.as_ptr(),
+            c_attr_name.as_bytes().len() as c_uint,
+            c_str.as_ptr(),
+            c_str.to_bytes().len() as c_uint,
+        );
+        llvm::EnzymeTypeTreeToStringFree(c_str.as_ptr());
+        attr
+    };
+    unsafe {
+        llvm::LLVMRustAddRetAttr(fn_def, ret_attr);
+    }
+}
 
 fn add_tt<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context,val: &'ll Value, tt: FncTree) {
     let inputs = tt.args;
