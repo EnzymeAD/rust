@@ -55,6 +55,7 @@ use llvm::{
     LLVMRustLLVMHasZlibCompressionForDebugSymbols, LLVMRustLLVMHasZstdCompressionForDebugSymbols, LLVMGetNextBasicBlock,
 };
 use rustc_ast::expand::autodiff_attrs::{AutoDiffItem, DiffActivity, DiffMode};
+use rustc_ast::expand::typetree::FncTree;
 use rustc_codegen_ssa::back::link::ensure_removed;
 use rustc_codegen_ssa::back::write::{
     BitcodeSection, CodegenContext, EmitObj, ModuleConfig, TargetMachineFactoryConfig,
@@ -1089,6 +1090,24 @@ pub(crate) unsafe fn differentiate(
     if std::env::var("ENZYME_LOOSE_TYPES").is_ok() {
         dbg!("Setting loose types to true");
         llvm::set_loose_types(true);
+    }
+
+    // Before dumping the module, we want all the tt to become part of the module.
+    for item in &diff_items {
+        let llvm_data_layout = unsafe { llvm::LLVMGetDataLayoutStr(&*llmod) };
+        let llvm_data_layout =
+            std::str::from_utf8(unsafe { CStr::from_ptr(llvm_data_layout) }.to_bytes())
+                .expect("got a non-UTF8 data-layout from LLVM");
+        //let input_tts: Vec<TypeTree> =
+        //    item.inputs.iter().map(|x| to_enzyme_typetree(x.clone(), llvm_data_layout, llcx)).collect();
+        //let output_tt = to_enzyme_typetree(item.output, llvm_data_layout, llcx);
+        let tt: FncTree = FncTree {
+            args: item.inputs,
+            ret: item.output,
+        };
+        let name = CString::new(item.source.clone()).unwrap();
+        let fn_def: llvm::Value = llvm::LLVMGetNamedFunction(llmod, name.as_ptr()).unwrap();
+        add_tt2(llmod, llcx, fn_def, tt);
     }
 
     if std::env::var("ENZYME_PRINT_MOD_BEFORE").is_ok() {
