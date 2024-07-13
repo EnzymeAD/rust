@@ -895,8 +895,10 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
     let mut known_values = vec![kv_tmp; input_activity.len()];
 
     let dummy_type = CFnTypeInfo {
-        Arguments: args_tree.as_mut_ptr(),
-        Return: output_tt.inner.clone(),
+        Arguments: std::ptr::null_mut(),
+        Return: std::ptr::null_mut(),
+        //Arguments: args_tree.as_mut_ptr(),
+        //Return: output_tt.inner.clone(),
         KnownValues: known_values.as_mut_ptr(),
     };
 
@@ -980,8 +982,10 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
     let mut known_values = vec![kv_tmp; input_tts.len()];
 
     let dummy_type = CFnTypeInfo {
-        Arguments: args_tree.as_mut_ptr(),
-        Return: output_tt.inner.clone(),
+        Arguments: std::ptr::null_mut(),
+        Return: std::ptr::null_mut(),
+        //Arguments: args_tree.as_mut_ptr(),
+        //Return: output_tt.inner.clone(),
         KnownValues: known_values.as_mut_ptr(),
     };
 
@@ -1023,12 +1027,12 @@ extern "C" {
     //pub fn LLVMEraseFromParent(BB: &BasicBlock) -> &Value;
     // Enzyme
     pub fn LLVMRustAddFncParamAttr<'a>(
-        Instr: &'a Value,
+        F: &'a Value,
         index: c_uint,
         Attr: &'a Attribute
     );
 
-    pub fn LLVMRustAddRetFncAttr(V: &Value, attr: Attribute);
+    pub fn LLVMRustAddRetFncAttr(F: &Value, attr: Attribute);
     pub fn LLVMRustRemoveFncAttr(V: &Value, attr: AttributeKind);
     pub fn LLVMRustHasDbgMetadata(I: &Value) -> bool;
     pub fn LLVMRustHasMetadata(I: &Value, KindID: c_uint) -> bool;
