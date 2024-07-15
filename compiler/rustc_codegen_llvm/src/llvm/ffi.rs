@@ -848,7 +848,7 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
     fnc: &Value,
     input_diffactivity: Vec<DiffActivity>,
     ret_diffactivity: DiffActivity,
-    input_tts: Vec<TypeTree>,
+    _input_tts: Vec<TypeTree>,
     _output_tt: TypeTree,
     void_ret: bool,
 ) -> (&Value, Vec<usize>) {
@@ -883,8 +883,7 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
 
     // We don't support volatile / extern / (global?) values.
     // Just because I didn't had time to test them, and it seems less urgent.
-    let args_uncacheable = vec![0; input_tts.len()];
-    assert!(args_uncacheable.len() == input_activity.len());
+    let args_uncacheable = vec![0; input_activity.len()];
     let num_fnc_args = LLVMCountParams(fnc);
     trace!("num_fnc_args: {}", num_fnc_args);
     trace!("input_activity.len(): {}", input_activity.len());
@@ -894,11 +893,16 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
 
     let mut known_values = vec![kv_tmp; input_activity.len()];
 
+    let tree_tmp = TypeTree::new();
+    let mut args_tree = vec![tree_tmp.inner; input_activity.len()];
+
+    //let mut args_tree = vec![std::ptr::null_mut(); input_activity.len()];
+    //let ret_tt = std::ptr::null_mut();
+    //let mut args_tree = vec![TypeTree::new().inner; input_tts.len()];
+    let ret_tt = TypeTree::new();
     let dummy_type = CFnTypeInfo {
-        Arguments: std::ptr::null_mut(),
-        Return: std::ptr::null_mut(),
-        //Arguments: args_tree.as_mut_ptr(),
-        //Return: output_tt.inner.clone(),
+        Arguments: args_tree.as_mut_ptr(),
+        Return: ret_tt.inner,
         KnownValues: known_values.as_mut_ptr(),
     };
 
@@ -967,12 +971,7 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
 
     // We don't support volatile / extern / (global?) values.
     // Just because I didn't had time to test them, and it seems less urgent.
-    let args_uncacheable = vec![0; input_tts.len()];
-    if args_uncacheable.len() != input_activity.len() {
-        dbg!("args_uncacheable.len(): {}", args_uncacheable.len());
-        dbg!("input_activity.len(): {}", input_activity.len());
-    }
-    assert!(args_uncacheable.len() == input_activity.len());
+    let args_uncacheable = vec![0; input_activity.len()];
     let num_fnc_args = LLVMCountParams(fnc);
     println!("num_fnc_args: {}", num_fnc_args);
     println!("input_activity.len(): {}", input_activity.len());
@@ -981,11 +980,15 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
 
     let mut known_values = vec![kv_tmp; input_tts.len()];
 
+    let tree_tmp = TypeTree::new();
+    let mut args_tree = vec![tree_tmp.inner; input_tts.len()];
+    //let mut args_tree = vec![TypeTree::new().inner; input_tts.len()];
+    let ret_tt = TypeTree::new();
+    //let mut args_tree = vec![std::ptr::null_mut(); input_tts.len()];
+    //let ret_tt = std::ptr::null_mut();
     let dummy_type = CFnTypeInfo {
-        Arguments: std::ptr::null_mut(),
-        Return: std::ptr::null_mut(),
-        //Arguments: args_tree.as_mut_ptr(),
-        //Return: output_tt.inner.clone(),
+        Arguments: args_tree.as_mut_ptr(),
+        Return: ret_tt.inner,
         KnownValues: known_values.as_mut_ptr(),
     };
 
