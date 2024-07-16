@@ -1098,9 +1098,6 @@ pub(crate) unsafe fn differentiate(
         let llvm_data_layout =
             std::str::from_utf8(unsafe { CStr::from_ptr(llvm_data_layout) }.to_bytes())
                 .expect("got a non-UTF8 data-layout from LLVM");
-        //let input_tts: Vec<TypeTree> =
-        //    item.inputs.iter().map(|x| to_enzyme_typetree(x.clone(), llvm_data_layout, llcx)).collect();
-        //let output_tt = to_enzyme_typetree(item.output, llvm_data_layout, llcx);
         let tt: FncTree = FncTree {
             args: item.inputs.clone(),
             ret: item.output.clone(),
@@ -1108,6 +1105,16 @@ pub(crate) unsafe fn differentiate(
         let name = CString::new(item.source.clone()).unwrap();
         let fn_def: &llvm::Value = llvm::LLVMGetNamedFunction(llmod, name.as_ptr()).unwrap();
         crate::builder::add_tt2(llmod, llcx, fn_def, tt);
+
+        // Before dumping the module, we also might want to add dummy functions,  which will
+        // trigger the LLVMEnzyme pass to run on them, if we invoke the opt binary.
+        // This is super helpfull if we want to create a MWE bug reproducer, e.g. to run in
+        // Enzyme's compiler explorer. TODO: Can we run llvm-extract on the module to remove all other functions?
+        if std::env::var("ENZYME_OPT").is_ok() {
+            dbg!("Enable extra debug helper to debug Enzyme through the opt plugin");
+            crate::builder::add_opt_dbg_helper(llmod, llcx, fn_def, item.attrs);
+        }
+
     }
 
     if std::env::var("ENZYME_PRINT_MOD_BEFORE").is_ok() {
