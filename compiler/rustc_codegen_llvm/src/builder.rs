@@ -8,7 +8,7 @@ use crate::type_::Type;
 use crate::type_of::LayoutLlvmExt;
 use crate::value::Value;
 use libc::{c_char, c_uint};
-use rustc_ast::expand::autodiff_attrs::AutoDiffAttrs;
+use rustc_ast::expand::autodiff_attrs::{AutoDiffAttrs, DiffActivity};
 use rustc_codegen_ssa::common::{IntPredicate, RealPredicate, SynchronizationScope, TypeKind};
 use rustc_codegen_ssa::mir::operand::{OperandRef, OperandValue};
 use rustc_codegen_ssa::mir::place::PlaceRef;
@@ -191,7 +191,7 @@ pub fn add_opt_dbg_helper<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Contex
     let inputs = attrs.input_activity;
     let outputs = attrs.ret_activity;
     let ad_name = match attrs.mode {
-        DiffMode::Forward => "__enzyme_forward",
+        DiffMode::Forward => "__enzyme_fwddiff",
         DiffMode::Reverse => "__enzyme_autodiff",
         DiffMode::ForwardFirst => "__enzyme_fwddiff",
         DiffMode::ReverseFirst => "__enzyme_autodiff",
@@ -207,6 +207,7 @@ pub fn add_opt_dbg_helper<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Contex
     //   ret double %0
     // }
 
+    let mut final_num_args;
     unsafe {
         let fn_ty = llvm::LLVMRustGetFunctionType(val);
         let ret_ty = llvm::LLVMGetReturnType(fn_ty);
@@ -233,9 +234,32 @@ pub fn add_opt_dbg_helper<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Contex
         let num_args = llvm::LLVMCountParams(wrapper_fn);
         let mut args = Vec::with_capacity(num_args as usize + 1);
         args.push(val);
+        // metadata !"enzyme_const"
+        let enzyme_const = llvm::LLVMMDStringInContext(llcx, "enzyme_const".as_ptr() as *const c_char, 12);
+        let enzyme_out = llvm::LLVMMDStringInContext(llcx, "enzyme_out".as_ptr() as *const c_char, 10);
+        let enzyme_dup = llvm::LLVMMDStringInContext(llcx, "enzyme_dup".as_ptr() as *const c_char, 10);
+        let enzyme_dupnoneed = llvm::LLVMMDStringInContext(llcx, "enzyme_dupnoneed".as_ptr() as *const c_char, 16);
+        final_num_args = num_args * 2 + 1;
         for i in 0..num_args {
             let arg = llvm::LLVMGetParam(wrapper_fn, i);
+            let activity = inputs[i as usize];
+            let (activity, duplicated): (&Value, bool) = match activity {
+                DiffActivity::None => panic!(),
+                DiffActivity::Const => (enzyme_const, false),
+                DiffActivity::Active => (enzyme_out, false),
+                DiffActivity::ActiveOnly => (enzyme_out, false),
+                DiffActivity::Dual => (enzyme_dup, true),
+                DiffActivity::DualOnly => (enzyme_dupnoneed, true),
+                DiffActivity::Duplicated => (enzyme_dup, true),
+                DiffActivity::DuplicatedOnly => (enzyme_dupnoneed, true),
+                DiffActivity::FakeActivitySize => (enzyme_const, false),
+            };
+            args.push(activity);
             args.push(arg);
+            if duplicated {
+                final_num_args += 1;
+                args.push(arg);
+            }
         }
 
         // declare void @__enzyme_autodiff(...)
@@ -245,7 +269,7 @@ pub fn add_opt_dbg_helper<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Contex
         //   ret void
         // }
 
-        let call = llvm::LLVMBuildCall2(builder, enzyme_ty, ad_fn, args.as_mut_ptr(), num_args as usize + 1, ad_name.as_ptr() as *const c_char);
+        let call = llvm::LLVMBuildCall2(builder, enzyme_ty, ad_fn, args.as_mut_ptr(), final_num_args as usize, ad_name.as_ptr() as *const c_char);
         let void_ty = llvm::LLVMVoidTypeInContext(llcx);
         if llvm::LLVMTypeOf(call) != void_ty {
             llvm::LLVMBuildRet(builder, call);
