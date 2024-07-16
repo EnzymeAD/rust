@@ -1093,7 +1093,7 @@ pub(crate) unsafe fn differentiate(
     }
 
     // Before dumping the module, we want all the tt to become part of the module.
-    for item in &diff_items {
+    for (i, item) in diff_items.iter().enumerate() {
         let llvm_data_layout = unsafe { llvm::LLVMGetDataLayoutStr(&*llmod) };
         let llvm_data_layout =
             std::str::from_utf8(unsafe { CStr::from_ptr(llvm_data_layout) }.to_bytes())
@@ -1112,12 +1112,11 @@ pub(crate) unsafe fn differentiate(
         // Enzyme's compiler explorer. TODO: Can we run llvm-extract on the module to remove all other functions?
         if std::env::var("ENZYME_OPT").is_ok() {
             dbg!("Enable extra debug helper to debug Enzyme through the opt plugin");
-            crate::builder::add_opt_dbg_helper(llmod, llcx, fn_def, item.attrs);
+            crate::builder::add_opt_dbg_helper(llmod, llcx, fn_def, item.attrs.clone(), i);
         }
-
     }
 
-    if std::env::var("ENZYME_PRINT_MOD_BEFORE").is_ok() {
+    if std::env::var("ENZYME_PRINT_MOD_BEFORE").is_ok() || std::env::var("ENZYME_OPT").is_ok(){
         unsafe {
             LLVMDumpModule(llmod);
         }

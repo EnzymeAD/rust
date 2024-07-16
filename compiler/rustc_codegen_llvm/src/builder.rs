@@ -31,6 +31,7 @@ use std::iter;
 use std::ops::Deref;
 use std::ptr;
 
+use rustc_ast::expand::autodiff_attrs::DiffMode;
 use crate::typetree::to_enzyme_typetree;
 use rustc_ast::expand::typetree::{TypeTree, FncTree};
 
@@ -182,32 +183,74 @@ pub fn add_tt2<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context, fn_def: 
     }
 }
 
-pub fn add_opt_dbg_helper<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context,val: &'ll Value, tt: AutoDiffAttrs) {
-    let inputs = tt.args;
-    let _ret: TypeTree = tt.ret;
-    let llvm_data_layout: *const c_char = unsafe { llvm::LLVMGetDataLayoutStr(&*llmod) };
-    let llvm_data_layout =
-        std::str::from_utf8(unsafe { std::ffi::CStr::from_ptr(llvm_data_layout) }.to_bytes())
-            .expect("got a non-UTF8 data-layout from LLVM");
-    let attr_name = "enzyme_type";
-    let c_attr_name = std::ffi::CString::new(attr_name).unwrap();
-    for (i, &ref input) in inputs.iter().enumerate() {
-        let c_tt = to_enzyme_typetree(input.clone(), llvm_data_layout, llcx);
-        let c_str = unsafe { llvm::EnzymeTypeTreeToString(c_tt.inner) };
-        let c_str = unsafe { std::ffi::CStr::from_ptr(c_str) };
-        unsafe {
-            let attr = llvm::LLVMCreateStringAttribute(
-                llcx,
-                c_attr_name.as_ptr(),
-                c_attr_name.as_bytes().len() as c_uint,
-                c_str.as_ptr(),
-                c_str.to_bytes().len() as c_uint,
-            );
-            llvm::LLVMRustAddParamAttr(val, i as u32, attr);
+#[allow(unused)]
+pub fn add_opt_dbg_helper<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context, val: &'ll Value, attrs: AutoDiffAttrs, i: usize) {
+    //pub mode: DiffMode,
+    //pub ret_activity: DiffActivity,
+    //pub input_activity: Vec<DiffActivity>,
+    let inputs = attrs.input_activity;
+    let outputs = attrs.ret_activity;
+    let ad_name = match attrs.mode {
+        DiffMode::Forward => "__enzyme_forward",
+        DiffMode::Reverse => "__enzyme_autodiff",
+        DiffMode::ForwardFirst => "__enzyme_fwddiff",
+        DiffMode::ReverseFirst => "__enzyme_autodiff",
+        _ => panic!("Why are we here?"),
+    };
+
+    // Assuming that our val is the fnc square, want to generate the following llvm-ir:
+    // declare double @__enzyme_autodiff(...)
+    //
+    // define double @dsquare(double %x) {
+    // entry:
+    //   %0 = tail call double (...) @__enzyme_autodiff(double (double)* nonnull @square, double %x)
+    //   ret double %0
+    // }
+
+    unsafe {
+        let fn_ty = llvm::LLVMRustGetFunctionType(val);
+        let wrapper_name = String::from("enzyme_opt_helper_") + i.to_string().as_str();
+        let wrapper_fn = llvm::LLVMRustGetOrInsertFunction(
+            llmod,
+            wrapper_name.as_ptr() as *const c_char,
+            wrapper_name.len().try_into().unwrap(),
+            fn_ty,
+        );
+        let entry = llvm::LLVMAppendBasicBlockInContext(llcx, wrapper_fn, "entry".as_ptr() as *const c_char);
+        let builder = llvm::LLVMCreateBuilderInContext(llcx);
+        llvm::LLVMPositionBuilderAtEnd(builder, entry);
+        let num_args = llvm::LLVMCountParams(wrapper_fn);
+        let mut  args = Vec::with_capacity(num_args as usize);
+        for i in 0..num_args {
+            let arg = llvm::LLVMGetParam(wrapper_fn, i);
+            args.push(arg);
         }
-        unsafe { llvm::EnzymeTypeTreeToStringFree(c_str.as_ptr()) };
+       //define void @enzyme_opt_helper_0(ptr %0, ptr %1) {
+       //  call void @ffff(ptr %0, ptr %1)
+       //  ret void
+       //}
+
+        //arg1: &Builder<'a>,
+        //ty: &Type,
+        //func: &Value,
+        //args: *mut &Value,
+        //num_args: size_t,
+        //name: *const c_char,
+        let call = llvm::LLVMBuildCall2(builder, fn_ty, val, args.as_mut_ptr(), num_args as usize, ad_name.as_ptr() as *const c_char);
+        let void_ty = llvm::LLVMVoidTypeInContext(llcx);
+        if llvm::LLVMTypeOf(call) != void_ty {
+            llvm::LLVMBuildRet(builder, call);
+        } else {
+            llvm::LLVMBuildRetVoid(builder);
+        }
+        llvm::LLVMDisposeBuilder(builder);
+
+        let _fnc_ok =
+            llvm::LLVMVerifyFunction(wrapper_fn, llvm::LLVMVerifierFailureAction::LLVMAbortProcessAction);
     }
+
 }
+
 fn add_tt<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context,val: &'ll Value, tt: FncTree) {
     let inputs = tt.args;
     let _ret: TypeTree = tt.ret;
