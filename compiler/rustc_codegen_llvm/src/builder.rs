@@ -209,6 +209,17 @@ pub fn add_opt_dbg_helper<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Contex
 
     unsafe {
         let fn_ty = llvm::LLVMRustGetFunctionType(val);
+        let ret_ty = llvm::LLVMGetReturnType(fn_ty);
+
+        // First we add the declaration of the __enzyme function
+        let enzyme_ty = llvm::LLVMFunctionType(ret_ty, ptr::null(), 0, True);
+        let ad_fn = llvm::LLVMRustGetOrInsertFunction(
+            llmod,
+            ad_name.as_ptr() as *const c_char,
+            ad_name.len().try_into().unwrap(),
+            enzyme_ty,
+        );
+
         let wrapper_name = String::from("enzyme_opt_helper_") + i.to_string().as_str();
         let wrapper_fn = llvm::LLVMRustGetOrInsertFunction(
             llmod,
@@ -220,23 +231,21 @@ pub fn add_opt_dbg_helper<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Contex
         let builder = llvm::LLVMCreateBuilderInContext(llcx);
         llvm::LLVMPositionBuilderAtEnd(builder, entry);
         let num_args = llvm::LLVMCountParams(wrapper_fn);
-        let mut  args = Vec::with_capacity(num_args as usize);
+        let mut args = Vec::with_capacity(num_args as usize + 1);
+        args.push(val);
         for i in 0..num_args {
             let arg = llvm::LLVMGetParam(wrapper_fn, i);
             args.push(arg);
         }
-       //define void @enzyme_opt_helper_0(ptr %0, ptr %1) {
-       //  call void @ffff(ptr %0, ptr %1)
-       //  ret void
-       //}
 
-        //arg1: &Builder<'a>,
-        //ty: &Type,
-        //func: &Value,
-        //args: *mut &Value,
-        //num_args: size_t,
-        //name: *const c_char,
-        let call = llvm::LLVMBuildCall2(builder, fn_ty, val, args.as_mut_ptr(), num_args as usize, ad_name.as_ptr() as *const c_char);
+        // declare void @__enzyme_autodiff(...)
+
+        // define void @enzyme_opt_helper_0(ptr %0, ptr %1) {
+        //   call void (...) @__enzyme_autodiff(ptr @ffff, ptr %0, ptr %1)
+        //   ret void
+        // }
+
+        let call = llvm::LLVMBuildCall2(builder, enzyme_ty, ad_fn, args.as_mut_ptr(), num_args as usize + 1, ad_name.as_ptr() as *const c_char);
         let void_ty = llvm::LLVMVoidTypeInContext(llcx);
         if llvm::LLVMTypeOf(call) != void_ty {
             llvm::LLVMBuildRet(builder, call);
