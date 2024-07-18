@@ -9,14 +9,12 @@ standard library, and documentation. It is modified to use Enzyme for AutoDiff.
 Please configure this fork using the following command:
 
 ```
-mkdir build
-cd build
-../configure --enable-llvm-link-shared --enable-llvm-plugins --enable-llvm-enzyme --release-channel=nightly --enable-llvm-assertions --enable-clang --enable-lld --enable-option-checking --enable-ninja --disable-docs
+./configure --enable-llvm-link-shared --enable-llvm-plugins --enable-llvm-enzyme --release-channel=nightly --enable-llvm-assertions --enable-clang --enable-lld --enable-option-checking --enable-ninja --disable-docs
 ```
 
 Afterwards you can build rustc using:
 ```
-../x.py build --stage 1 library
+x.py build --stage 1 library
 ```
 
 Afterwards rustc toolchain link will allow you to use it through cargo:
@@ -31,32 +29,11 @@ You can then run an examples from our [docs](https://enzyme.mit.edu/index.fcgi/r
 cargo +enzyme run --release
 ```
 
-## Enzyme Config
-To help with debugging, Enzyme can be configured using environment variables.
-```bash
-export ENZYME_PRINT_TA=1
-export ENZYME_PRINT_AA=1
-export ENZYME_PRINT=1
-export ENZYME_PRINT_MOD=1
-export ENZYME_PRINT_MOD_AFTER=1
-```
-The first three will print TypeAnalysis, ActivityAnalysis and the llvm-ir on a function basis, respectively.
-The last two variables will print the whole module directly before and after Enzyme differented the functions. 
-
-When experimenting with flags please make sure that EnzymeStrictAliasing=0
-is not changed, since it is required for Enzyme to handle enums correctly.
-
 ## Bug reporting
 Bugs are pretty much expected at this point of the development process.
-In order to help us please minimize the Rust code as far as possible.
-This tool might be a nicer helper: https://github.com/Nilstrieb/cargo-minimize
-If you have some knowledge of LLVM-IR we also greatly appreciate it if you could help
-us by compiling your minimized Rust code to LLVM-IR and reducing it further.
-
-The only exception to this strategy is error based on "Can not deduce type of X",
-where reducing your example will make it harder for us to understand the origin of the bug.
-In this case please just try to inline all dependencies into a single crate or even file,
-without deleting used code.
+Any type of bug report is therefore highly appreciated. Documentation
+on how to best debug this fork and how to report errors can be found
+on our [website]: https://enzyme.mit.edu/index.fcgi/rust/Debugging.html
 
 
 
