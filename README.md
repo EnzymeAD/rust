@@ -9,9 +9,7 @@ standard library, and documentation. It is modified to use Enzyme for AutoDiff.
 Please configure this fork using the following command:
 
 ```
-mkdir build
-cd build
-../configure --enable-llvm-link-shared --enable-llvm-plugins --enable-llvm-enzyme --release-channel=nightly --enable-llvm-assertions --enable-clang --enable-lld --enable-option-checking --enable-ninja --disable-docs
+./configure --enable-llvm-link-shared --enable-llvm-plugins --enable-llvm-enzyme --release-channel=nightly --enable-llvm-assertions --enable-clang --enable-lld --enable-option-checking --enable-ninja --disable-docs
 ```
 
 Afterwards you can build rustc using:
