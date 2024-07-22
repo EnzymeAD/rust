@@ -4,6 +4,7 @@ use std::fmt;
 pub enum Kind {
     Anything,
     Integer,
+    FatPointer,
     Pointer,
     Half,
     Float,
