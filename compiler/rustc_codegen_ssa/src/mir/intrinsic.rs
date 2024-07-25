@@ -30,9 +30,9 @@ fn copy_intrinsic<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
     count: Bx::Value,
 ) {
     let tcx: TyCtxt<'_> = bx.cx().tcx();
-    let fnc_tree: TypeTree = typetree_from(tcx, ty);
+    let tt: TypeTree = typetree_from(tcx, ty);
     let fnc_tree: FncTree = FncTree {
-        args: vec![fnc_tree.clone(), fnc_tree.clone()],
+        args: vec![tt.clone(), tt.clone(), TypeTree::all_ints()],
         ret: TypeTree::new(),
     };
 
@@ -58,9 +58,9 @@ fn memset_intrinsic<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
     count: Bx::Value,
 ) {
     let tcx: TyCtxt<'_> = bx.cx().tcx();
-    let fnc_tree: TypeTree = typetree_from(tcx, ty);
+    let tt: TypeTree = typetree_from(tcx, ty);
     let fnc_tree: FncTree = FncTree {
-        args: vec![fnc_tree.clone(), fnc_tree.clone()],
+        args: vec![tt.clone(), tt.clone(), TypeTree::all_ints()],
         ret: TypeTree::new(),
     };
 
