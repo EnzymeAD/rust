@@ -97,6 +97,11 @@ pub(crate) struct DlltoolFailImportLibrary<'a> {
 #[note]
 pub(crate) struct DynamicLinkingWithLTO;
 
+#[derive(Diagnostic)]
+#[diag(codegen_llvm_autodiff_without_lto)]
+#[note]
+pub(crate) struct AutoDiffWithoutLTO;
+
 pub(crate) struct ParseTargetMachineConfig<'a>(pub LlvmError<'a>);
 
 impl<G: EmissionGuarantee> IntoDiagnostic<'_, G> for ParseTargetMachineConfig<'_> {

@@ -35,7 +35,7 @@ use rustc_span::symbol::sym;
 use rustc_span::{BytePos, FileName, InnerSpan, Pos, Span};
 use rustc_target::spec::{MergeFunctions, SanitizerSet};
 
-use crate::errors::ErrorCreatingRemarkDir;
+use crate::errors::{ErrorCreatingRemarkDir, AutodiffWithoutLto};
 use std::any::Any;
 use std::borrow::Cow;
 use std::fs;
@@ -382,9 +382,6 @@ fn generate_lto_work<B: ExtraBackendMethods>(
     import_only_modules: Vec<(SerializedModule<B::ModuleBuffer>, WorkProduct)>,
 ) -> Vec<(WorkItem<B>, u64)> {
     let _prof_timer = cgcx.prof.generic_activity("codegen_generate_lto_work");
-    //let error_msg = format!("Found {} Functions, but {} TypeTrees", autodiff.len(), typetrees.len());
-    // Don't assert yet, bc. apparently we add them later.
-    //assert!(autodiff.len() == typetrees.len(), "{}", error_msg);
 
     if !needs_fat_lto.is_empty() {
         assert!(needs_thin_lto.is_empty());
@@ -397,7 +394,10 @@ fn generate_lto_work<B: ExtraBackendMethods>(
         // We are adding a single work item, so the cost doesn't matter.
         vec![(WorkItem::LTO(module), 0)]
     } else {
-        assert!(autodiff.is_empty());
+        if !autodiff.is_empty() {
+            let dcx = cgcx.create_dcx();
+            dcx.emit_fatal(AutodiffWithoutLto{});
+        }
         assert!(needs_fat_lto.is_empty());
         let (lto_modules, copy_jobs) = B::run_thin_lto(cgcx, needs_thin_lto, import_only_modules)
             .unwrap_or_else(|e| e.raise());

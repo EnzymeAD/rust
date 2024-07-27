@@ -90,7 +90,7 @@ impl<B: WriteBackendMethods> LtoModuleCodegen<B> {
             LtoModuleCodegen::Fat { ref module, .. } => {
                 B::autodiff(cgcx, &module, diff_fncs, typetrees, config)?;
             }
-            _ => panic!("autodiff called with non-fat LTO module"),
+            _ => panic!("Unreachable? Autodiff called with non-fat LTO module"),
         }
 
         Ok(self)

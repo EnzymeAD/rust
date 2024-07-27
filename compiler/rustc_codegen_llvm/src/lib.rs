@@ -25,10 +25,11 @@ extern crate rustc_macros;
 #[macro_use]
 extern crate tracing;
 
+use rustc_session::config::Lto;
 use back::owned_target_machine::OwnedTargetMachine;
 use back::write::{create_informational_target_machine, create_target_machine};
 
-use errors::ParseTargetMachineConfig;
+use errors::{ParseTargetMachineConfig, AutoDiffWithoutLTO};
 
 #[allow(unused_imports)]
 use llvm::TypeTree;
@@ -268,6 +269,10 @@ impl WriteBackendMethods for LlvmCodegenBackend {
         typetrees: FxHashMap<String, Self::TypeTree>,
         config: &ModuleConfig,
     ) -> Result<(), FatalError> {
+        if cgcx.lto != Lto::Fat {
+            let dcx = cgcx.create_dcx();
+            return Err(dcx.emit_almost_fatal(AutoDiffWithoutLTO{}));
+        }
         unsafe { back::write::differentiate(module, cgcx, diff_fncs, typetrees, config) }
     }
 
