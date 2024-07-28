@@ -27,6 +27,15 @@ jobs:
           submodules: true # check out all submodules so the cache can work correctly
           fetch-depth: 2
       - uses: dtolnay/rust-toolchain@nightly
+      - name: Create cache folders
+        run: |
+          mkdir -p build/build/x86_64-unknown-linux-gnu/llvm
+          mkdir -p build/build/x86_64-unknown-linux-gnu/enzyme
+          mkdir -p build/build/bootstrap/
+          mkdir -p build/build/x86_64-unknown-linux-gnu/stage0-rustc/
+          mkdir -p build/build/x86_64-unknown-linux-gnu/stage0-std/
+          mkdir -p build/build/x86_64-unknown-linux-gnu/stage0-tools/
+          mkdir -p build/build/x86_64-unknown-linux-gnu/stage1-std/
       - name: Get LLVM commit hash
         id: llvm-commit
         run: echo "HEAD=$(git rev-parse HEAD:src/llvm-project)" >> $GITHUB_OUTPUT
@@ -59,32 +68,36 @@ jobs:
           key: enzyme-rust-incremental-${{ runner.os }}-${{ hashFiles('src/**/Cargo.lock', 'Cargo.lock') }}
           restore-keys: |
             enzyme-rust-incremental-${{ runner.os }}
-      - name: Build
-        run: |
-          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
-          sudo apt-add-repository "deb http://apt.llvm.org/`lsb_release -c | cut -f2`/ llvm-toolchain-`lsb_release -c | cut -f2`-17 main" || true
-          sudo apt-get -y update
-          sudo apt-get install -y lld-17
-          mkdir lld-path-manipulation
-          ln -s "$(which lld-17)" lld-path-manipulation/lld
-          ln -s "$(which lld-17)" lld-path-manipulation/ld
-          ln -s "$(which lld-17)" lld-path-manipulation/ld.lld
-          ln -s "$(which lld-17)" lld-path-manipulation/lld-17
-          export PATH="$PWD/lld-path-manipulation:$PATH"
-          mkdir -p build
-          cd build
-          rm -f config.toml
-          ../configure --enable-llvm-link-shared --enable-llvm-plugins --enable-llvm-enzyme --set=rust.use-lld=true --release-channel=nightly --enable-llvm-assertions --enable-option-checking --enable-ninja --disable-docs
-          ../x.py build --stage 1 library/std library/proc_macro library/test tools/rustdoc
-          rustup toolchain link enzyme build/host/stage1
-      - name: checkout Enzyme/rustbook
-        uses: actions/checkout@v4
-        with:
-          repository: EnzymeAD/rustbook
-          ref: main
-          path: rustbook
-      - name: test Enzyme/rustbook
-        working-directory: rustbook
-        run: |
-          cargo +enzyme test
-          ENZYME_LOOSE_TYPES=1 cargo +enzyme test -p samples-loose-types
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+      - name: Fail
+        run: 'false'
+          #      - name: Build
+          #        run: |
+          #          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
+          #          sudo apt-add-repository "deb http://apt.llvm.org/`lsb_release -c | cut -f2`/ llvm-toolchain-`lsb_release -c | cut -f2`-17 main" || true
+          #          sudo apt-get -y update
+          #          sudo apt-get install -y lld-17
+          #          mkdir lld-path-manipulation
+          #          ln -s "$(which lld-17)" lld-path-manipulation/lld
+          #          ln -s "$(which lld-17)" lld-path-manipulation/ld
+          #          ln -s "$(which lld-17)" lld-path-manipulation/ld.lld
+          #          ln -s "$(which lld-17)" lld-path-manipulation/lld-17
+          #          export PATH="$PWD/lld-path-manipulation:$PATH"
+          #          mkdir -p build
+          #          cd build
+          #          rm -f config.toml
+          #          ../configure --enable-llvm-link-shared --enable-llvm-plugins --enable-llvm-enzyme --set=rust.use-lld=true --release-channel=nightly --enable-llvm-assertions --enable-option-checking --enable-ninja --disable-docs
+          #          ../x.py build --stage 1 library/std library/proc_macro library/test tools/rustdoc
+          #          rustup toolchain link enzyme build/host/stage1
+          #      - name: checkout Enzyme/rustbook
+          #        uses: actions/checkout@v4
+          #        with:
+          #          repository: EnzymeAD/rustbook
+          #          ref: main
+          #          path: rustbook
+          #      - name: test Enzyme/rustbook
+          #        working-directory: rustbook
+          #        run: |
+          #          cargo +enzyme test
+          #          ENZYME_LOOSE_TYPES=1 cargo +enzyme test -p samples-loose-types
