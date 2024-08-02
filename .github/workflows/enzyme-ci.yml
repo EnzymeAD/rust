@@ -86,5 +86,5 @@ jobs:
       - name: test Enzyme/rustbook
         working-directory: rustbook
         run: |
-          cargo +enzyme test
-          ENZYME_LOOSE_TYPES=1 cargo +enzyme test -p samples-loose-types
+          RUSTFLAGS='-Z unstable-options' cargo +enzyme test
+          ENZYME_LOOSE_TYPES=1 RUSTFLAGS='-Z unstable-options' cargo +enzyme test -p samples-loose-types
