@@ -14,7 +14,7 @@ Please configure this fork using the following command:
 
 Afterwards you can build rustc using:
 ```
-x.py build --stage 1 library
+./x.py build --stage 1 library
 ```
 
 Afterwards rustc toolchain link will allow you to use it through cargo:
