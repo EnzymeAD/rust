@@ -271,7 +271,7 @@ pub fn coerce_unsized_into<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
                 OperandValue::Immediate(base) => unsize_ptr(bx, base, src_ty, dst_ty, None),
                 OperandValue::Ref(..) | OperandValue::ZeroSized => bug!(),
             };
-            OperandValue::Pair(base, info).store(bx, dst);
+            OperandValue::Pair(base, info).store(bx, dst, None);
         }
 
         (&ty::Adt(def_a, _), &ty::Adt(def_b, _)) => {

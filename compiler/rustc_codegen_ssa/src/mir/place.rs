@@ -363,7 +363,7 @@ impl<'a, 'tcx, V: CodegenObject> PlaceRef<'tcx, V> {
                     } else {
                         bx.cx().const_uint_big(niche_llty, niche_value)
                     };
-                    OperandValue::Immediate(niche_llval).store(bx, niche);
+                    OperandValue::Immediate(niche_llval).store(bx, niche, None);
                 }
             }
         }

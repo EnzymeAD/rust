@@ -424,7 +424,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                 let llslot = match op.val {
                     Immediate(_) | Pair(..) => {
                         let scratch = PlaceRef::alloca(bx, self.fn_abi.ret.layout);
-                        op.val.store(bx, scratch);
+                        op.val.store(bx, scratch, None);
                         scratch.llval
                     }
                     Ref(llval, _, align) => {
@@ -833,7 +833,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                     self.get_caller_location(bx, mir::SourceInfo { span: fn_span, ..source_info });
 
                 if let ReturnDest::IndirectOperand(tmp, _) = ret_dest {
-                    location.val.store(bx, tmp);
+                    location.val.store(bx, tmp, None);
                 }
                 self.store_return(bx, ret_dest, &fn_abi.ret, location.immediate());
                 helper.funclet_br(self, bx, target, mergeable_succ)
@@ -993,7 +993,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                 | (&mir::Operand::Constant(_), Ref(_, None, _)) => {
                     let tmp = PlaceRef::alloca(bx, op.layout);
                     bx.lifetime_start(tmp.llval, tmp.layout.size);
-                    op.val.store(bx, tmp);
+                    op.val.store(bx, tmp, None);
                     op.val = Ref(tmp.llval, None, tmp.align);
                     copied_constant_arguments.push(tmp);
                 }
@@ -1337,12 +1337,12 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                         None => arg.layout.align.abi,
                     };
                     let scratch = PlaceRef::alloca_aligned(bx, arg.layout, required_align);
-                    op.val.store(bx, scratch);
+                    op.val.store(bx, scratch, None);
                     (scratch.llval, scratch.align, true)
                 }
                 PassMode::Cast { .. } => {
                     let scratch = PlaceRef::alloca(bx, arg.layout);
-                    op.val.store(bx, scratch);
+                    op.val.store(bx, scratch, None);
                     (scratch.llval, scratch.align, true)
                 }
                 _ => (op.immediate_or_packed_pair(bx), arg.layout.align.abi, false),
@@ -1502,7 +1502,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
 
             let slot = self.get_personality_slot(&mut cleanup_bx);
             slot.storage_live(&mut cleanup_bx);
-            Pair(exn0, exn1).store(&mut cleanup_bx, slot);
+            Pair(exn0, exn1).store(&mut cleanup_bx, slot, None);
 
             cleanup_bx.br(llbb);
             cleanup_llbb

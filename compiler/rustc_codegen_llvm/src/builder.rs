@@ -623,12 +623,16 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         }
     }
 
-    fn load(&mut self, ty: &'ll Type, ptr: &'ll Value, align: Align) -> &'ll Value {
-        unsafe {
+    fn load(&mut self, ty: &'ll Type, ptr: &'ll Value, align: Align, tt: Option<FncTree>) -> &'ll Value {
+        let load = unsafe {
             let load = llvm::LLVMBuildLoad2(self.llbuilder, ty, ptr, UNNAMED);
             llvm::LLVMSetAlignment(load, align.bytes() as c_uint);
             load
+        };
+        if let Some(tt) = tt {
+            add_tt(self.cx().llmod, self.cx().llcx, load, tt);
         }
+        load
     }
 
     fn volatile_load(&mut self, ty: &'ll Type, ptr: &'ll Value) -> &'ll Value {
@@ -823,8 +827,12 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         }
     }
 
-    fn store(&mut self, val: &'ll Value, ptr: &'ll Value, align: Align) -> &'ll Value {
-        self.store_with_flags(val, ptr, align, MemFlags::empty())
+    fn store(&mut self, val: &'ll Value, ptr: &'ll Value, align: Align, tt: Option<FncTree>) -> &'ll Value {
+        let store = self.store_with_flags(val, ptr, align, MemFlags::empty());
+        if let Some(tt) = tt {
+            add_tt(self.cx().llmod, self.cx().llcx, store, tt);
+        }
+        store
     }
 
     fn store_with_flags(

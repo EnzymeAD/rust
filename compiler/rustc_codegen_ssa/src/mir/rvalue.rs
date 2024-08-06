@@ -29,7 +29,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                 let cg_operand = self.codegen_operand(bx, operand);
                 // FIXME: consider not copying constants through stack. (Fixable by codegen'ing
                 // constants into `OperandValue::Ref`; why don’t we do that yet if we don’t?)
-                cg_operand.val.store(bx, dest);
+                cg_operand.val.store(bx, dest, None);
             }
 
             mir::Rvalue::Cast(
@@ -43,7 +43,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                     // Into-coerce of a thin pointer to a fat pointer -- just
                     // use the operand path.
                     let temp = self.codegen_rvalue_operand(bx, rvalue);
-                    temp.val.store(bx, dest);
+                    temp.val.store(bx, dest, None);
                     return;
                 }
 
@@ -63,7 +63,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                         debug!("codegen_rvalue: creating ugly alloca");
                         let scratch = PlaceRef::alloca(bx, operand.layout);
                         scratch.storage_live(bx);
-                        operand.val.store(bx, scratch);
+                        operand.val.store(bx, scratch, None);
                         base::coerce_unsized_into(bx, scratch, dest);
                         scratch.storage_dead(bx);
                     }
@@ -144,7 +144,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                         } else {
                             variant_dest.project_field(bx, field_index.as_usize())
                         };
-                        op.val.store(bx, field);
+                        op.val.store(bx, field, None);
                     }
                 }
                 dest.codegen_set_discr(bx, variant_index);
@@ -153,7 +153,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             _ => {
                 assert!(self.rvalue_creates_operand(rvalue, DUMMY_SP));
                 let temp = self.codegen_rvalue_operand(bx, rvalue);
-                temp.val.store(bx, dest);
+                temp.val.store(bx, dest, None);
             }
         }
     }
@@ -169,7 +169,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
         debug_assert!(dst.layout.is_sized());
 
         if let Some(val) = self.codegen_transmute_operand(bx, src, dst.layout) {
-            val.store(bx, dst);
+            val.store(bx, dst, None);
             return;
         }
 
@@ -184,7 +184,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             OperandValue::Immediate(..) | OperandValue::Pair(..) => {
                 // When we have immediate(s), the alignment of the source is irrelevant,
                 // so we can store them using the destination's alignment.
-                src.val.store(bx, PlaceRef::new_sized_aligned(dst.llval, src.layout, dst.align));
+                src.val.store(bx, PlaceRef::new_sized_aligned(dst.llval, src.layout, dst.align), None);
             }
         }
     }
