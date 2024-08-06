@@ -12,6 +12,8 @@ use rustc_middle::ty::layout::{LayoutOf, TyAndLayout};
 use rustc_middle::ty::Ty;
 use rustc_target::abi::{self, Abi, Align, Size};
 
+use rustc_ast::expand::typetree::FncTree;
+
 use std::fmt;
 
 /// The representation of a Rust value. The enum variant is in fact
@@ -373,8 +375,9 @@ impl<'a, 'tcx, V: CodegenObject> OperandValue<V> {
         self,
         bx: &mut Bx,
         dest: PlaceRef<'tcx, V>,
+        tt: Option<FncTree>,
     ) {
-        self.store_with_flags(bx, dest, MemFlags::empty());
+        self.store_with_flags(bx, dest, MemFlags::empty(), tt);
     }
 
     pub fn volatile_store<Bx: BuilderMethods<'a, 'tcx, Value = V>>(
@@ -382,7 +385,7 @@ impl<'a, 'tcx, V: CodegenObject> OperandValue<V> {
         bx: &mut Bx,
         dest: PlaceRef<'tcx, V>,
     ) {
-        self.store_with_flags(bx, dest, MemFlags::VOLATILE);
+        self.store_with_flags(bx, dest, MemFlags::VOLATILE, None);
     }
 
     pub fn unaligned_volatile_store<Bx: BuilderMethods<'a, 'tcx, Value = V>>(
@@ -390,7 +393,7 @@ impl<'a, 'tcx, V: CodegenObject> OperandValue<V> {
         bx: &mut Bx,
         dest: PlaceRef<'tcx, V>,
     ) {
-        self.store_with_flags(bx, dest, MemFlags::VOLATILE | MemFlags::UNALIGNED);
+        self.store_with_flags(bx, dest, MemFlags::VOLATILE | MemFlags::UNALIGNED, None);
     }
 
     pub fn nontemporal_store<Bx: BuilderMethods<'a, 'tcx, Value = V>>(
@@ -398,7 +401,7 @@ impl<'a, 'tcx, V: CodegenObject> OperandValue<V> {
         bx: &mut Bx,
         dest: PlaceRef<'tcx, V>,
     ) {
-        self.store_with_flags(bx, dest, MemFlags::NONTEMPORAL);
+        self.store_with_flags(bx, dest, MemFlags::NONTEMPORAL, None);
     }
 
     fn store_with_flags<Bx: BuilderMethods<'a, 'tcx, Value = V>>(
@@ -406,6 +409,7 @@ impl<'a, 'tcx, V: CodegenObject> OperandValue<V> {
         bx: &mut Bx,
         dest: PlaceRef<'tcx, V>,
         flags: MemFlags,
+        tt: Option<FncTree>,
     ) {
         debug!("OperandRef::store: operand={:?}, dest={:?}", self, dest);
         match self {
@@ -486,7 +490,7 @@ impl<'a, 'tcx, V: CodegenObject> OperandValue<V> {
 
         // Store the allocated region and the extra to the indirect place.
         let indirect_operand = OperandValue::Pair(dst, llextra);
-        indirect_operand.store(bx, indirect_dest);
+        indirect_operand.store(bx, indirect_dest, None);
     }
 }
 
