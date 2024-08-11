@@ -927,7 +927,8 @@ mod parse {
             *slot = vec![];
             return true;
         };
-        let v: Vec<&str> = v.split(",").collect();
+        let mut v: Vec<&str> = v.split(",").collect();
+        v.sort_unstable();
         for &val in v.iter() {
             let variant = match val {
                 "PrintTA" => AutoDiff::PrintTA,
@@ -1581,7 +1582,7 @@ options! {
     assume_incomplete_release: bool = (false, parse_bool, [TRACKED],
         "make cfg(version) treat the current version as incomplete (default: no)"),
     autodiff: Vec<crate::config::AutoDiff> = (Vec::new(), parse_autodiff, [TRACKED],
-        "a list autodiff flags to enable (space separated)"),
+        "a list autodiff flags to enable (comma separated)"),
     #[rustc_lint_opt_deny_field_access("use `Session::binary_dep_depinfo` instead of this field")]
     binary_dep_depinfo: bool = (false, parse_bool, [TRACKED],
         "include artifacts (sysroot, crate dependencies) used during compilation in dep-info \

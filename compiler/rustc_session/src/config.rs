@@ -2828,19 +2828,6 @@ pub fn build_session_options(early_dcx: &mut EarlyDiagCtxt, matches: &getopts::M
         }
     }
 
-    // Check for unstable values of -Z ad"
-    //match cg.autodiff {
-    //    AutoDiff::None => {}
-    //    // unstable values
-    //    _ => {
-    //        if !unstable_opts.unstable_options {
-    //            early_dcx.early_fatal(
-    //                "`-Z ad` requires `-Z unstable-options`",
-    //            );
-    //        }
-    //    }
-    //}
-
     if let Ok(graphviz_font) = std::env::var("RUSTC_GRAPHVIZ_FONT") {
         unstable_opts.graphviz_font = graphviz_font;
     }
