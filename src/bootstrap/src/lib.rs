@@ -76,6 +76,9 @@ const LLD_FILE_NAMES: &[&str] = &["ld.lld", "ld64.lld", "lld-link", "wasm-ld"];
 /// (Mode restriction, config name, config values (if any))
 const EXTRA_CHECK_CFGS: &[(Option<Mode>, &str, Option<&[&'static str]>)] = &[
     (None, "bootstrap", None),
+    (Some(Mode::Rustc), "llvm_enzyme", None),
+    (Some(Mode::Codegen), "llvm_enzyme", None),
+    (Some(Mode::ToolRustc), "llvm_enzyme", None),
     (Some(Mode::Rustc), "parallel_compiler", None),
     (Some(Mode::ToolRustc), "parallel_compiler", None),
     (Some(Mode::ToolRustc), "rust_analyzer", None),
@@ -165,6 +168,7 @@ pub struct Build {
     clippy_info: GitInfo,
     miri_info: GitInfo,
     rustfmt_info: GitInfo,
+    enzyme_info: GitInfo,
     in_tree_llvm_info: GitInfo,
     local_rebuild: bool,
     fail_fast: bool,
@@ -328,6 +332,7 @@ impl Build {
         let clippy_info = GitInfo::new(omit_git_hash, &src.join("src/tools/clippy"));
         let miri_info = GitInfo::new(omit_git_hash, &src.join("src/tools/miri"));
         let rustfmt_info = GitInfo::new(omit_git_hash, &src.join("src/tools/rustfmt"));
+        let enzyme_info = GitInfo::new(omit_git_hash, &src.join("src/tools/enzyme"));
 
         // we always try to use git for LLVM builds
         let in_tree_llvm_info = GitInfo::new(false, &src.join("src/llvm-project"));
@@ -410,6 +415,7 @@ impl Build {
             clippy_info,
             miri_info,
             rustfmt_info,
+            enzyme_info,
             in_tree_llvm_info,
             cc: RefCell::new(HashMap::new()),
             cxx: RefCell::new(HashMap::new()),
@@ -797,6 +803,10 @@ impl Build {
 
     fn lld_out(&self, target: TargetSelection) -> PathBuf {
         self.out.join(&*target.triple).join("lld")
+    }
+
+    fn enzyme_out(&self, target: TargetSelection) -> PathBuf {
+        self.out.join(&*target.triple).join("enzyme")
     }
 
     /// Output directory for all documentation for a target
@@ -1856,6 +1866,9 @@ pub fn generate_smart_stamp_hash(dir: &Path, additional_input: &str) -> String {
         .map(|o| String::from_utf8(o.stdout).unwrap_or_default())
         .unwrap_or_default();
 
+    eprintln!("Computing stamp for {dir:?}");
+    eprintln!("Diff output: {diff:?}");
+
     let status = Command::new("git")
         .current_dir(dir)
         .arg("status")
@@ -1866,13 +1879,19 @@ pub fn generate_smart_stamp_hash(dir: &Path, additional_input: &str) -> String {
         .map(|o| String::from_utf8(o.stdout).unwrap_or_default())
         .unwrap_or_default();
 
+    eprintln!("Status output: {status:?}");
+    eprintln!("Additional input: {additional_input:?}");
     let mut hasher = sha2::Sha256::new();
 
     hasher.update(diff);
     hasher.update(status);
     hasher.update(additional_input);
 
-    hex_encode(hasher.finalize().as_slice())
+    let result = hex_encode(hasher.finalize().as_slice());
+
+    eprintln!("Final hash: {result:?}");
+
+    result
 }
 
 /// Ensures that the behavior dump directory is properly initialized.

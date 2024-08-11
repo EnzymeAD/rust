@@ -729,6 +729,7 @@ fn test_unstable_options_tracking_hash() {
 
     // Make sure that changing a [TRACKED] option changes the hash.
     // tidy-alphabetical-start
+    tracked!(autodiff, vec![String::from("ad_flags")]);
     tracked!(allow_features, Some(vec![String::from("lang_items")]));
     tracked!(always_encode_mir, true);
     tracked!(asm_comments, true);

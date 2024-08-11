@@ -69,6 +69,7 @@ symbols! {
 
         // Keywords that are used in unstable Rust or reserved for future use.
         Abstract:           "abstract",
+        //Autodiff:           "autodiff",
         Become:             "become",
         Box:                "box",
         Do:                 "do",
@@ -438,6 +439,8 @@ symbols! {
         attributes,
         augmented_assignments,
         auto_traits,
+        autodiff,
+        autodiff_fallback,
         automatically_derived,
         avx,
         avx512_target_feature,
@@ -491,6 +494,7 @@ symbols! {
         cfg_accessible,
         cfg_attr,
         cfg_attr_multi,
+        cfg_autodiff_fallback,
         cfg_doctest,
         cfg_eval,
         cfg_hide,
@@ -1372,6 +1376,7 @@ symbols! {
         rustc_allow_incoherent_impl,
         rustc_allowed_through_unstable_modules,
         rustc_attrs,
+        rustc_autodiff,
         rustc_box,
         rustc_builtin_macro,
         rustc_capture_analysis,

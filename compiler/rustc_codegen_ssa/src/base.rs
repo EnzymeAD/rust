@@ -44,6 +44,9 @@ use std::time::{Duration, Instant};
 
 use itertools::Itertools;
 
+use rustc_middle::ty::typetree_from;
+use rustc_ast::expand::typetree::{TypeTree, FncTree};
+
 pub fn bin_op_to_icmp_predicate(op: hir::BinOpKind, signed: bool) -> IntPredicate {
     match op {
         hir::BinOpKind::Eq => IntPredicate::IntEQ,
@@ -357,6 +360,7 @@ pub fn wants_new_eh_instructions(sess: &Session) -> bool {
     wants_wasm_eh(sess) || wants_msvc_seh(sess)
 }
 
+// Manuel TODO
 pub fn memcpy_ty<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
     bx: &mut Bx,
     dst: Bx::Value,
@@ -370,6 +374,13 @@ pub fn memcpy_ty<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
     if size == 0 {
         return;
     }
+    let my_ty = layout.ty;
+    let tcx: TyCtxt<'_> = bx.cx().tcx();
+    let fnc_tree: TypeTree = typetree_from(tcx, my_ty);
+    let fnc_tree: FncTree = FncTree {
+        args: vec![fnc_tree.clone(), fnc_tree.clone()],
+        ret: TypeTree::new(),
+    };
 
     if flags == MemFlags::empty()
         && let Some(bty) = bx.cx().scalar_copy_backend_type(layout)
@@ -377,8 +388,11 @@ pub fn memcpy_ty<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
         let temp = bx.load(bty, src, src_align);
         bx.store(temp, dst, dst_align);
     } else {
-        bx.memcpy(dst, dst_align, src, src_align, bx.cx().const_usize(size), flags);
+        trace!("my_ty: {:?}, enzyme tt: {:?}", my_ty, fnc_tree);
+        trace!("memcpy_ty: {:?} -> {:?} (size={}, align={:?})", src, dst, size, dst_align);
+        bx.memcpy(dst, dst_align, src, src_align, bx.cx().const_usize(size), flags, Some(fnc_tree));
     }
+    //let (_args, _ret): (Vec<TypeTree>, TypeTree) = (fnc_tree.args, fnc_tree.ret);
 }
 
 pub fn codegen_instance<'a, 'tcx: 'a, Bx: BuilderMethods<'a, 'tcx>>(
@@ -594,7 +608,8 @@ pub fn codegen_crate<B: ExtraBackendMethods>(
 
     // Run the monomorphization collector and partition the collected items into
     // codegen units.
-    let codegen_units = tcx.collect_and_partition_mono_items(()).1;
+    let (_, autodiff_fncs, codegen_units) = tcx.collect_and_partition_mono_items(());
+    let autodiff_fncs = autodiff_fncs.to_vec();
 
     // Force all codegen_unit queries so they are already either red or green
     // when compile_codegen_unit accesses them. We are not able to re-execute
@@ -661,6 +676,10 @@ pub fn codegen_crate<B: ExtraBackendMethods>(
             ModuleCodegen { name: llmod_id, module_llvm, kind: ModuleKind::Allocator },
             cost,
         );
+    }
+
+    if !autodiff_fncs.is_empty() {
+        ongoing_codegen.submit_autodiff_items(autodiff_fncs);
     }
 
     // For better throughput during parallel processing by LLVM, we used to sort
@@ -980,7 +999,7 @@ pub fn provide(providers: &mut Providers) {
             config::OptLevel::SizeMin => config::OptLevel::Default,
         };
 
-        let (defids, _) = tcx.collect_and_partition_mono_items(cratenum);
+        let (defids, _, _) = tcx.collect_and_partition_mono_items(cratenum);
 
         let any_for_speed = defids.items().any(|id| {
             let CodegenFnAttrs { optimize, .. } = tcx.codegen_fn_attrs(*id);

@@ -1,6 +1,8 @@
 middle_adjust_for_foreign_abi_error =
     target architecture {$arch} does not support `extern {$abi}` ABI
 
+middle_autodiff_unsafe_inner_const_ref = reading from a `Duplicated` const {$ty} is unsafe
+
 middle_assert_async_resume_after_panic = `async fn` resumed after panicking
 
 middle_assert_async_resume_after_return = `async fn` resumed after completion
@@ -85,3 +87,5 @@ middle_unknown_layout =
 
 middle_values_too_big =
     values of the type `{$ty}` are too big for the current architecture
+
+middle_unsupported_union = we don't support unions yet: '{$ty_name}'

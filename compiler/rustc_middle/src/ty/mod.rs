@@ -10,6 +10,9 @@
 //! ["The `ty` module: representing types"]: https://rustc-dev-guide.rust-lang.org/ty.html
 
 #![allow(rustc::usage_of_ty_tykind)]
+#![allow(unused_imports)]
+
+use rustc_target::abi::FieldsShape;
 
 pub use self::fold::{FallibleTypeFolder, TypeFoldable, TypeFolder, TypeSuperFoldable};
 pub use self::visit::{TypeSuperVisitable, TypeVisitable, TypeVisitableExt, TypeVisitor};
@@ -17,7 +20,7 @@ pub use self::AssocItemContainer::*;
 pub use self::BorrowKind::*;
 pub use self::IntVarValue::*;
 pub use self::Variance::*;
-use crate::error::{OpaqueHiddenTypeMismatch, TypeMismatchReason};
+use crate::error::{OpaqueHiddenTypeMismatch, TypeMismatchReason, UnsupportedUnion, AutodiffUnsafeInnerConstRef};
 use crate::metadata::ModChild;
 use crate::middle::privacy::EffectiveVisibilities;
 use crate::mir::{Body, CoroutineLayout};
@@ -71,6 +74,7 @@ pub use rustc_type_ir::ConstKind::{
 };
 pub use rustc_type_ir::*;
 
+pub use self::typetree::*;
 pub use self::binding::BindingMode;
 pub use self::binding::BindingMode::*;
 pub use self::closure::{
@@ -101,6 +105,7 @@ pub use self::typeck_results::{
     CanonicalUserType, CanonicalUserTypeAnnotation, CanonicalUserTypeAnnotations, IsIdentity,
     TypeckResults, UserType, UserTypeAnnotationIndex,
 };
+use crate::query::Key;
 
 pub mod _match;
 pub mod abstract_const;
@@ -122,6 +127,7 @@ pub mod util;
 pub mod visit;
 pub mod vtable;
 pub mod walk;
+pub mod typetree;
 
 mod adt;
 mod assoc;
@@ -195,6 +201,8 @@ pub struct ResolverAstLowering {
     pub node_id_to_def_id: NodeMap<LocalDefId>,
     pub def_id_to_node_id: IndexVec<LocalDefId, ast::NodeId>,
 
+    /// Mapping of autodiff function IDs
+    pub autodiff_map: FxHashMap<LocalDefId, LocalDefId>,
     pub trait_map: NodeMap<Vec<hir::TraitCandidate>>,
     /// List functions and methods for which lifetime elision was successful.
     pub lifetime_elision_allowed: FxHashSet<ast::NodeId>,
@@ -2713,3 +2721,4 @@ mod size_asserts {
     static_assert_size!(WithCachedTypeInfo<TyKind<'_>>, 56);
     // tidy-alphabetical-end
 }
+

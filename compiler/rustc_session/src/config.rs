@@ -174,6 +174,53 @@ pub enum InstrumentCoverage {
     Off,
 }
 
+/// The different settings that the `-Z ad` flag can have.
+#[derive(Clone, Copy, PartialEq, Hash, Debug)]
+pub enum AutoDiff {
+    /// Print TypeAnalysis information
+    PrintTA,
+    /// Print ActivityAnalysis Information
+    PrintAA,
+    /// Print Performance Warnings from Enzyme
+    PrintPerf,
+    /// Combines the three print flags above.
+    Print,
+    /// Print the whole module, before running opts.
+    PrintModBefore,
+    /// Print the whole module just before we pass it to Enzyme.
+    /// For Debug purpose, prefer the OPT flag below
+    PrintModAfterOpts,
+    /// Print the module after Enzyme differentiated everything.
+    PrintModAfterEnzyme,
+
+    /// Enzyme's loose type debug helper (can cause incorrect gradients)
+    LooseTypes,
+    /// Output a Module using __enzyme calls to prepare it for opt + enzyme pass usage
+    OPT,
+
+    /// TypeTree options
+    /// TODO: Figure out how to let users construct these,
+    /// or whether we want to leave this option in the first place.
+    TTWidth(u64),
+    TTDepth(u64),
+
+    /// More flags
+    NoModOptAfter,
+    /// Tell Enzyme to run LLVM Opts on each function it generated. By default off,
+    /// since we already optimize the whole module after Enzyme is done.
+    EnableFncOpt,
+    NoVecUnroll,
+    /// Obviously unsafe, disable the length checks that we have for shadow args.
+    NoSafetyChecks,
+    RuntimeActivity,
+    /// Runs Enzyme specific Inlining
+    Inline,
+    /// Runs Optimization twice after AD, and zero times after.
+    /// This is mainly for Benchmarking purpose to show that
+    /// compiler based AD has a performance benefit. TODO: fix
+    AltPipeline,
+}
+
 /// Settings for `-Z instrument-xray` flag.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct InstrumentXRay {
@@ -1273,6 +1320,7 @@ fn default_configuration(sess: &Session) -> Cfg {
     //
     // NOTE: These insertions should be kept in sync with
     // `CheckCfg::fill_well_known` below.
+    ins_none!(sym::autodiff_fallback);
 
     if sess.opts.debug_assertions {
         ins_none!(sym::debug_assertions);
@@ -1460,6 +1508,7 @@ impl CheckCfg {
         //
         // When adding a new config here you should also update
         // `tests/ui/check-cfg/well-known-values.rs`.
+        ins!(sym::autodiff_fallback, no_values);
 
         ins!(sym::debug_assertions, no_values);
 
@@ -3227,8 +3276,9 @@ pub(crate) mod dep_tracking {
         LinkerPluginLto, LocationDetail, LtoCli, NextSolverConfig, OomStrategy, OptLevel,
         OutFileName, OutputType, OutputTypes, Polonius, RemapPathScopeComponents, ResolveDocLinks,
         SourceFileHashAlgorithm, SplitDwarfKind, SwitchWithOptPath, SymbolManglingVersion,
-        TrimmedDefPaths, WasiExecModel,
+        TrimmedDefPaths, WasiExecModel, AutoDiff,
     };
+    //use crate::config::AutoDiff;
     use crate::lint;
     use crate::utils::NativeLib;
     use rustc_data_structures::fx::FxIndexMap;
@@ -3283,6 +3333,7 @@ pub(crate) mod dep_tracking {
     }
 
     impl_dep_tracking_hash_via_hash!(
+        AutoDiff,
         bool,
         usize,
         NonZeroUsize,

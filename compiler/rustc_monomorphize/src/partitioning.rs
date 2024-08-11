@@ -98,6 +98,7 @@ use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
+use rustc_ast::expand::autodiff_attrs::{AutoDiffItem, AutoDiffAttrs};
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::sync;
 use rustc_hir::def::DefKind;
@@ -111,14 +112,21 @@ use rustc_middle::mir::mono::{
 };
 use rustc_middle::query::Providers;
 use rustc_middle::ty::print::{characteristic_def_id_of_type, with_no_trimmed_paths};
-use rustc_middle::ty::{self, visit::TypeVisitableExt, InstanceDef, TyCtxt};
+use rustc_middle::ty::{
+    self, visit::TypeVisitableExt, InstanceDef, ParamEnv, TyCtxt,
+    fnc_typetrees
+};
 use rustc_session::config::{DumpMonoStatsFormat, SwitchWithOptPath};
 use rustc_session::CodegenUnits;
 use rustc_span::symbol::Symbol;
+use rustc_symbol_mangling::symbol_name_for_instance_in_crate;
 
 use crate::collector::UsageMap;
 use crate::collector::{self, MonoItemCollectionMode};
 use crate::errors::{CouldntDumpMonoStats, SymbolAlreadyDefined, UnknownCguCollectionMode};
+
+use rustc_ast::expand::autodiff_attrs::DiffActivity;
+
 
 struct PartitioningCx<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
@@ -248,7 +256,14 @@ where
             &mut can_be_internalized,
             export_generics,
         );
-        if visibility == Visibility::Hidden && can_be_internalized {
+
+        // We can't differentiate something that got inlined.
+        let autodiff_active = match characteristic_def_id {
+            Some(def_id) => cx.tcx.autodiff_attrs(def_id).is_active(),
+            None => false,
+        };
+
+        if !autodiff_active && visibility == Visibility::Hidden && can_be_internalized {
             internalization_candidates.insert(mono_item);
         }
         let size_estimate = mono_item.size_estimate(cx.tcx);
@@ -1084,7 +1099,10 @@ where
     }
 }
 
-fn collect_and_partition_mono_items(tcx: TyCtxt<'_>, (): ()) -> (&DefIdSet, &[CodegenUnit<'_>]) {
+fn collect_and_partition_mono_items(
+    tcx: TyCtxt<'_>,
+    (): (),
+) -> (&DefIdSet, &[AutoDiffItem], &[CodegenUnit<'_>]) {
     let collection_mode = match tcx.sess.opts.unstable_opts.print_mono_items {
         Some(ref s) => {
             let mode = s.to_lowercase();
@@ -1142,6 +1160,61 @@ fn collect_and_partition_mono_items(tcx: TyCtxt<'_>, (): ()) -> (&DefIdSet, &[Co
             _ => None,
         })
         .collect();
+
+    let autodiff_items2: Vec<_> = items
+        .iter()
+        .filter_map(|item| match *item {
+            MonoItem::Fn(ref instance) => Some((item, instance)),
+            _ => None,
+        }).collect();
+    let mut autodiff_items: Vec<AutoDiffItem> = vec![];
+
+    for (item, instance) in autodiff_items2 {
+            let target_id = instance.def_id();
+            let target_attrs: &AutoDiffAttrs = tcx.autodiff_attrs(target_id);
+            let mut input_activities: Vec<DiffActivity> = target_attrs.input_activity.clone();
+            if target_attrs.is_source() {
+                trace!("source found: {:?}", target_id);
+            }
+            if !target_attrs.apply_autodiff() {
+                continue;
+            }
+
+            let target_symbol =
+                symbol_name_for_instance_in_crate(tcx, instance.clone(), LOCAL_CRATE);
+
+            let source =
+                usage_map.used_map.get(&item).unwrap().into_iter().find_map(|item| match *item {
+                    MonoItem::Fn(ref instance_s) => {
+                        let source_id = instance_s.def_id();
+                        if tcx.autodiff_attrs(source_id).is_active() {
+                            return Some(instance_s);
+                        }
+                        None
+                    }
+                    _ => None,
+                });
+            let inst = match source {
+                Some(source) => source,
+                None => continue,
+            };
+
+            println!("source_id: {:?}", inst.def_id());
+            let fn_ty = inst.ty(tcx, ParamEnv::empty());
+            assert!(fn_ty.is_fn());
+            let span = tcx.def_span(inst.def_id());
+            let fnc_tree = fnc_typetrees(tcx, fn_ty, &mut input_activities, Some(span));
+            let (inputs, output) = (fnc_tree.args, fnc_tree.ret);
+            //check_types(inst.ty(tcx, ParamEnv::empty()), tcx, &target_attrs.input_activity);
+            let symb = symbol_name_for_instance_in_crate(tcx, inst.clone(), LOCAL_CRATE);
+
+            let mut new_target_attrs = target_attrs.clone();
+            new_target_attrs.input_activity = input_activities;
+            let itm = new_target_attrs.into_item(symb, target_symbol, inputs, output);
+            autodiff_items.push(itm);
+        };
+
+    let autodiff_items = tcx.arena.alloc_from_iter(autodiff_items);
 
     // Output monomorphization stats per def_id
     if let SwitchWithOptPath::Enabled(ref path) = tcx.sess.opts.unstable_opts.dump_mono_stats {
@@ -1202,9 +1275,79 @@ fn collect_and_partition_mono_items(tcx: TyCtxt<'_>, (): ()) -> (&DefIdSet, &[Co
             println!("MONO_ITEM {item}");
         }
     }
+    if autodiff_items.len() > 0 {
+        trace!("AUTODIFF ITEMS EXIST");
+        for item in &mut *autodiff_items {
+            trace!("{}", &item);
+        }
+    }
 
-    (tcx.arena.alloc(mono_items), codegen_units)
+    (tcx.arena.alloc(mono_items), autodiff_items, codegen_units)
 }
+
+#[allow(dead_code)]
+enum Checks {
+    Slice(usize),
+    Enum(usize),
+}
+
+// ty is going to get duplicated. So we need to find DST
+// inside to later make sure that it's shadow is at least
+// equally large.
+//pub fn check_for_types<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, pos: usize) {
+//    // Find all DST inside of this type.
+//    let johnnie = ty.walk();
+//    let mut check_positions = 0;
+//    let mut check_vec = Vec::new();
+//    while let Some(ty) = johnnie.next() {
+//        if ty.is_trivially_sized(tcx) {
+//            ty.skip_current_subtree()
+//        }
+//        if ty.is_slice() {
+//            check_vec.push(Checks::Slice(check_positions));
+//        }
+//        if ty.is_enum() {
+//            check_vec.push(Checks::Enum(check_positions));
+//        }
+//        if ty.is_adt() {
+//            let adt_def = ty.ty_adt_def().unwrap();
+//            if adt_def.is_struct() {
+//                let fields = adt_def.all_fields();
+//                for field in fields {
+//                    let field_ty: Ty<'_> = field.ty(tcx, ty.substs);
+//                    if field_ty.is_phantom_data() {
+//                        continue;
+//                    }
+//                    if field_ty.is_trivially_sized(tcx) {
+//                        continue;
+//                    }
+//                    check_vec.push(Checks::Enum(check_positions));
+//                }
+//            }
+//        }
+//
+//        //ty::Str | ty::Slice(_) | ty::Dynamic(..) | ty::Foreign(..) => false,
+//        //ty::Tuple(tys) => tys.iter().all(|ty| ty.is_trivially_sized(tcx)),
+//        //ty::Adt(def, _args) => def.sized_constraint(tcx).skip_binder().is_empty(),
+//        check_positions += 1;
+//    }
+//}
+//pub fn check_types<'tcx>(fn_ty: Ty<'tcx>, tcx: TyCtxt<'tcx>, activities: &[DiffActivity]) {
+//    let fnc_binder: ty::Binder<'_, ty::FnSig<'_>> = fn_ty.fn_sig(tcx);
+//
+//    // TODO: verify.
+//    let x: ty::FnSig<'_> = fnc_binder.skip_binder();
+//    let _inputs = x.inputs();
+//    for i in 0..activities.len() {
+//        match activities[i] {
+//            DiffActivity::Const => continue,
+//            DiffActivity::Active => continue,
+//            DiffActivity::ActiveOnly => continue,
+//            _ => {},
+//        }
+//        check_for_types(inputs[i], tcx, i);
+//    }
+//}
 
 /// Outputs stats about instantiation counts and estimated size, per `MonoItem`'s
 /// def, to a file in the given output directory.
@@ -1288,12 +1431,12 @@ pub fn provide(providers: &mut Providers) {
     providers.collect_and_partition_mono_items = collect_and_partition_mono_items;
 
     providers.is_codegened_item = |tcx, def_id| {
-        let (all_mono_items, _) = tcx.collect_and_partition_mono_items(());
+        let (all_mono_items, _, _) = tcx.collect_and_partition_mono_items(());
         all_mono_items.contains(&def_id)
     };
 
     providers.codegen_unit = |tcx, name| {
-        let (_, all) = tcx.collect_and_partition_mono_items(());
+        let (_, _, all) = tcx.collect_and_partition_mono_items(());
         all.iter()
             .find(|cgu| cgu.name() == name)
             .unwrap_or_else(|| panic!("failed to find cgu with name {name:?}"))

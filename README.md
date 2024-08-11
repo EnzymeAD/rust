@@ -1,9 +1,46 @@
-# The Rust Programming Language
+# The Rust Programming Language + AutoDiff
 
 [![Rust Community](https://img.shields.io/badge/Rust_Community%20-Join_us-brightgreen?style=plastic&logo=rust)](https://www.rust-lang.org/community)
 
 This is the main source code repository for [Rust]. It contains the compiler,
-standard library, and documentation.
+standard library, and documentation. It is modified to use Enzyme for AutoDiff.
+
+
+Please configure this fork using the following command:
+
+```
+./configure --enable-llvm-link-shared --enable-llvm-plugins --enable-llvm-enzyme --release-channel=nightly --enable-llvm-assertions --enable-clang --enable-lld --enable-option-checking --enable-ninja --disable-docs
+```
+
+Afterwards you can build rustc using:
+```
+./x.py build --stage 1 library
+```
+
+Afterwards rustc toolchain link will allow you to use it through cargo:
+```
+rustup toolchain link enzyme build/host/stage1
+rustup toolchain install nightly # enables -Z unstable-options
+```
+
+You can then run examples from our [docs](https://enzyme.mit.edu/index.fcgi/rust/usage/usage.html):
+
+```bash
+cd ..
+git clone git@github.com:EnzymeAD/rustbook.git  
+cd rustbook/samples
+cargo +enzyme test reverse
+```
+If you want to use Autodiff in your own projects, please always enable `lto="fat"` in your Cargo.toml 
+and use `cargo +enzyme` instead of `cargo` or `cargo +nightly`. 
+
+## Bug reporting
+Bugs are pretty much expected at this point of the development process.
+Any type of bug report is therefore highly appreciated. Documentation
+on how to best debug this fork and how to report errors can be found
+on our [website]: https://enzyme.mit.edu/index.fcgi/rust/Debugging.html
+
+
 
 [Rust]: https://www.rust-lang.org/
 
