@@ -23,11 +23,16 @@ rustup toolchain link enzyme build/host/stage1
 rustup toolchain install nightly # enables -Z unstable-options
 ```
 
-You can then run an examples from our [docs](https://enzyme.mit.edu/index.fcgi/rust/usage/usage.html) using
+You can then run examples from our [docs](https://enzyme.mit.edu/index.fcgi/rust/usage/usage.html):
 
 ```bash
-cargo +enzyme run --release
+cd ..
+git clone git@github.com:EnzymeAD/rustbook.git  
+cd rustbook/samples
+cargo +enzyme test reverse
 ```
+If you want to use Autodiff in your own projects, please always enable `lto="fat"` in your Cargo.toml 
+and use `cargo +enzyme` instead of `cargo` or `cargo +nightly`. 
 
 ## Bug reporting
 Bugs are pretty much expected at this point of the development process.
