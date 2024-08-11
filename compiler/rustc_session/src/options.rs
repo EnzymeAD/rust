@@ -358,6 +358,7 @@ fn build_options<O: Default>(
 
 #[allow(non_upper_case_globals)]
 mod desc {
+    pub const parse_autodiff: &str = "various values";
     pub const parse_no_flag: &str = "no value";
     pub const parse_bool: &str = "one of: `y`, `yes`, `on`, `true`, `n`, `no`, `off` or `false`";
     pub const parse_opt_bool: &str = parse_bool;
@@ -917,41 +918,40 @@ mod parse {
         }
     }
 
-    //pub(crate) fn parse_autodiff(
-    //    slot: &mut AutoDiff,
-    //    v: Option<&str>,
-    //) -> bool {
-    //    if v.is_none() {
-    //        *slot = AutoDiff::None;
-    //        return true;
-    //    }
+    pub(crate) fn parse_autodiff(
+        slot: &mut Vec<AutoDiff>,
+        v: Option<&str>,
+    ) -> bool {
 
-    //    let Some(v) = v else {
-    //        *slot = AutoDiff::None;
-    //        return true;
-    //    };
+        let Some(v) = v else {
+            *slot = vec![];
+            return true;
+        };
+        let v: Vec<&str> = v.split(",").collect();
+        for &val in v.iter() {
+            let variant = match val {
+                "PrintTA" => AutoDiff::PrintTA,
+                "PrintAA" => AutoDiff::PrintAA,
+                "PrintPerf" => AutoDiff::PrintPerf,
+                "Print" => AutoDiff::Print,
+                "PrintModBefore" => AutoDiff::PrintModBefore,
+                "PrintModAfterOpts" => AutoDiff::PrintModAfterOpts,
+                "PrintModAfterEnzyme" => AutoDiff::PrintModAfterEnzyme,
+                "LooseTypes" => AutoDiff::LooseTypes,
+                "OPT" => AutoDiff::OPT,
+                "NoModOptAfter" => AutoDiff::NoModOptAfter,
+                "EnableFncOpt" => AutoDiff::EnableFncOpt,
+                "NoVecUnroll" => AutoDiff::NoVecUnroll,
+                "NoSafetyChecks" => AutoDiff::NoSafetyChecks,
+                "Inline" => AutoDiff::Inline,
+                "AltPipeline" => AutoDiff::AltPipeline,
+                _ => return false,
+            };
+            slot.push(variant);
+        }
 
-    //    *slot = match v {
-    //        "None" => AutoDiff::None,
-    //        "PrintTA" => AutoDiff::PrintTA,
-    //        "PrintAA" => AutoDiff::PrintAA,
-    //        "PrintPerf" => AutoDiff::PrintPerf,
-    //        "Print" => AutoDiff::Print,
-    //        "PrintModBefore" => AutoDiff::PrintModBefore,
-    //        "PrintModAfterOpts" => AutoDiff::PrintModAfterOpts,
-    //        "PrintModAfterEnzyme" => AutoDiff::PrintModAfterEnzyme,
-    //        "LooseTypes" => AutoDiff::LooseTypes,
-    //        "OPT" => AutoDiff::OPT,
-    //        "NoModOptAfter" => AutoDiff::NoModOptAfter,
-    //        "EnableFncOpt" => AutoDiff::EnableFncOpt,
-    //        "NoVecUnroll" => AutoDiff::NoVecUnroll,
-    //        "NoSafetyChecks" => AutoDiff::NoSafetyChecks,
-    //        "Inline" => AutoDiff::Inline,
-    //        "AltPipeline" => AutoDiff::AltPipeline,
-    //        _ => return false,
-    //    };
-    //    true
-    //}
+        true
+    }
 
     pub(crate) fn parse_instrument_coverage(
         slot: &mut InstrumentCoverage,
@@ -1580,7 +1580,7 @@ options! {
          either `loaded` or `not-loaded`."),
     assume_incomplete_release: bool = (false, parse_bool, [TRACKED],
         "make cfg(version) treat the current version as incomplete (default: no)"),
-    autodiff: Vec<String> = (Vec::new(), parse_list, [TRACKED],
+    autodiff: Vec<crate::config::AutoDiff> = (Vec::new(), parse_autodiff, [TRACKED],
         "a list autodiff flags to enable (space separated)"),
     #[rustc_lint_opt_deny_field_access("use `Session::binary_dep_depinfo` instead of this field")]
     binary_dep_depinfo: bool = (false, parse_bool, [TRACKED],
