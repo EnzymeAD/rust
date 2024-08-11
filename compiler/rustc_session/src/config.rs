@@ -174,6 +174,32 @@ pub enum InstrumentCoverage {
     Off,
 }
 
+/// The different settings that the `-Z ad` flag can have.
+#[derive(Clone, Copy, PartialEq, Hash, Debug)]
+pub enum AutoDiff {
+    None,
+    PrintTA,
+    PrintAA,
+    PrintPerf,
+    Print,
+    PrintModBefore,
+    PrintModAfterOpts,
+    PrintModAfterEnzyme,
+
+    /// Enzyme's loose type debug helper (can cause incorrect gradients)
+    LooseTypes,
+    /// Output a Module using __enzyme calls to prepare it for opt + enzyme pass usage
+    OPT,
+
+    /// More flags
+    NoModOptAfter,
+    EnableFncOpt,
+    NoVecUnroll,
+    NoSafetyChecks,
+    Inline,
+    AltPipeline,
+}
+
 /// Settings for `-Z instrument-xray` flag.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct InstrumentXRay {
@@ -2780,6 +2806,19 @@ pub fn build_session_options(early_dcx: &mut EarlyDiagCtxt, matches: &getopts::M
             Some(SymbolManglingVersion::V0) => {}
         }
     }
+
+    // Check for unstable values of -Z ad"
+    //match cg.autodiff {
+    //    AutoDiff::None => {}
+    //    // unstable values
+    //    _ => {
+    //        if !unstable_opts.unstable_options {
+    //            early_dcx.early_fatal(
+    //                "`-Z ad` requires `-Z unstable-options`",
+    //            );
+    //        }
+    //    }
+    //}
 
     if let Ok(graphviz_font) = std::env::var("RUSTC_GRAPHVIZ_FONT") {
         unstable_opts.graphviz_font = graphviz_font;
