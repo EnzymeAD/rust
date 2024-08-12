@@ -22,6 +22,7 @@ pub type Bool = c_uint;
 pub const True: Bool = 1 as Bool;
 pub const False: Bool = 0 as Bool;
 
+
 #[derive(Copy, Clone, PartialEq)]
 #[repr(C)]
 #[allow(dead_code)] // Variants constructed by C++.
@@ -109,6 +110,23 @@ pub enum CallConv {
     AvrNonBlockingInterrupt = 84,
     AvrInterrupt = 85,
     AmdGpuKernel = 91,
+}
+
+/// LLVMRustErrorType
+#[derive(Copy, Clone, PartialEq)]
+#[repr(C)]
+pub enum ErrorType {
+  NoDerivative = 0,
+  NoShadow = 1,
+  IllegalTypeAnalysis = 2,
+  NoType = 3,
+  IllegalFirstPointer = 4,
+  InternalError = 5,
+  TypeDepthExceeded = 6,
+  MixedActivityError = 7,
+  IllegalReplaceFicticiousPHIs = 8,
+  GetIndexError = 9,
+  NoTruncate = 10,
 }
 
 /// LLVMRustLinkage
