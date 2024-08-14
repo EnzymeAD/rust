@@ -109,7 +109,7 @@ pub use self::visit::{TypeSuperVisitable, TypeVisitable, TypeVisitableExt, TypeV
 pub use self::AssocItemContainer::*;
 pub use self::BorrowKind::*;
 pub use self::IntVarValue::*;
-use crate::error::{OpaqueHiddenTypeMismatch, TypeMismatchReason, UnsupportedUnion, AutodiffUnsafeInnerConstRef};
+use crate::error::{OpaqueHiddenTypeMismatch, TypeMismatchReason};
 use crate::metadata::ModChild;
 use crate::middle::privacy::EffectiveVisibilities;
 use crate::mir::{Body, CoroutineLayout};
@@ -119,7 +119,6 @@ use crate::ty;
 pub use crate::ty::diagnostics::*;
 use crate::ty::fast_reject::SimplifiedType;
 use crate::ty::util::Discr;
-use crate::query::Key;
 
 pub mod abstract_const;
 pub mod adjustment;

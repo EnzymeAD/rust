@@ -191,6 +191,7 @@ pub(crate) struct AutoDiffInvalidApplication {
     pub(crate) span: Span,
 }
 
+#[cfg(not(llvm_enzyme))]
 #[derive(Diagnostic)]
 #[diag(builtin_macros_autodiff_not_build)]
 pub(crate) struct AutoDiffSupportNotBuild {

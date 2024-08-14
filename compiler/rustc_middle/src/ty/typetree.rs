@@ -1,12 +1,10 @@
-use crate::ty::{self, Ty, FieldsShape, TypeAndMut};
+use crate::ty::{self, Ty, FieldsShape};
 use rustc_ast::expand::typetree::{Type, TypeTree, FncTree, Kind};
 //, Type, Kind, TypeTree, FncTree, FieldsShape};
 use super::context::TyCtxt;
 use rustc_span::Span;
 use super::{ParamEnv, ParamEnvAnd};
 use crate::error::AutodiffUnsafeInnerConstRef;
-use super::adt::*;
-use rustc_hir as hir;
 use rustc_type_ir::Adt;
 use tracing::trace;
 
@@ -67,7 +65,7 @@ pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<Diff
             if ty.is_fn_ptr() {
                 unimplemented!("what to do whith fn ptr?");
             }
-            let inner_ty = ty.builtin_deref(true).unwrap().ty;
+            let inner_ty = ty.builtin_deref(true).unwrap();
             if inner_ty.is_slice() {
                 // We know that the lenght will be passed as extra arg.
                 let child = typetree_from_ty(inner_ty, tcx, 1, safety, &mut visited, span);

@@ -88,6 +88,8 @@ pub fn expand(
     //check_builtin_macro_attribute(ecx, meta_item, sym::alloc_error_handler);
 
     // first get the annotable item:
+
+    use ast::visit::AssocCtxt;
     let (sig, is_impl): (FnSig, bool) = match &item {
         Annotatable::Item(ref iitem) => {
             let sig = match &iitem.kind {
@@ -99,7 +101,7 @@ pub fn expand(
             };
             (sig.clone(), false)
         },
-        Annotatable::ImplItem(ref assoc_item) => {
+        Annotatable::AssocItem(ref assoc_item, AssocCtxt::Impl) => {
             let sig = match &assoc_item.kind {
                 ast::AssocItemKind::Fn(box ast::Fn { sig, .. }) => sig,
                 _ => {
@@ -130,7 +132,7 @@ pub fn expand(
         Annotatable::Item(ref iitem) => {
             (iitem.vis.clone(), iitem.ident.clone())
         },
-        Annotatable::ImplItem(ref assoc_item) => {
+        Annotatable::AssocItem(ref assoc_item, AssocCtxt::Impl) => {
             (assoc_item.vis.clone(), assoc_item.ident.clone())
         },
         _ => {
@@ -240,14 +242,14 @@ pub fn expand(
             }
             Annotatable::Item(iitem.clone())
         },
-        Annotatable::ImplItem(ref mut assoc_item) => {
+        Annotatable::AssocItem(ref mut assoc_item, i @ AssocCtxt::Impl) => {
             if !assoc_item.attrs.iter().any(|a| a.id == attr.id) {
                 assoc_item.attrs.push(attr.clone());
             }
             if !assoc_item.attrs.iter().any(|a| a.id == inline_never.id) {
                 assoc_item.attrs.push(inline_never.clone());
             }
-            Annotatable::ImplItem(assoc_item.clone())
+            Annotatable::AssocItem(assoc_item.clone(), i)
         },
         _ => {
             panic!("not supported");
@@ -273,7 +275,7 @@ pub fn expand(
             kind: assoc_item,
             tokens: None,
         });
-        Annotatable::ImplItem(d_fn)
+        Annotatable::AssocItem(d_fn, AssocCtxt::Impl)
     } else {
         let mut d_fn = ecx.item(span, d_ident, thin_vec![attr.clone(), inline_never], ItemKind::Fn(asdf));
         d_fn.vis = vis;
