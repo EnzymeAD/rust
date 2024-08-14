@@ -11,6 +11,8 @@
 
 #![allow(rustc::usage_of_ty_tykind)]
 
+use rustc_target::abi::FieldsShape;
+
 use std::assert_matches::assert_matches;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
@@ -59,6 +61,7 @@ use tracing::{debug, instrument};
 pub use vtable::*;
 use {rustc_ast as ast, rustc_attr as attr, rustc_hir as hir};
 
+pub use self::typetree::*;
 pub use self::closure::{
     analyze_coroutine_closure_captures, is_ancestor_or_same_capture, place_to_string_for_capture,
     BorrowKind, CaptureInfo, CapturedPlace, ClosureTypeInfo, MinCaptureInformationMap,
@@ -106,7 +109,7 @@ pub use self::visit::{TypeSuperVisitable, TypeVisitable, TypeVisitableExt, TypeV
 pub use self::AssocItemContainer::*;
 pub use self::BorrowKind::*;
 pub use self::IntVarValue::*;
-use crate::error::{OpaqueHiddenTypeMismatch, TypeMismatchReason};
+use crate::error::{OpaqueHiddenTypeMismatch, TypeMismatchReason, UnsupportedUnion, AutodiffUnsafeInnerConstRef};
 use crate::metadata::ModChild;
 use crate::middle::privacy::EffectiveVisibilities;
 use crate::mir::{Body, CoroutineLayout};
@@ -116,6 +119,7 @@ use crate::ty;
 pub use crate::ty::diagnostics::*;
 use crate::ty::fast_reject::SimplifiedType;
 use crate::ty::util::Discr;
+use crate::query::Key;
 
 pub mod abstract_const;
 pub mod adjustment;
@@ -136,6 +140,7 @@ pub mod util;
 pub mod visit;
 pub mod vtable;
 pub mod walk;
+pub mod typetree;
 
 mod adt;
 mod assoc;
@@ -210,6 +215,9 @@ pub struct ResolverAstLowering {
     pub extra_lifetime_params_map: NodeMap<Vec<(Ident, ast::NodeId, LifetimeRes)>>,
 
     pub next_node_id: ast::NodeId,
+
+    /// Mapping of autodiff function IDs
+    pub autodiff_map: FxHashMap<LocalDefId, LocalDefId>,
 
     pub node_id_to_def_id: NodeMap<LocalDefId>,
 

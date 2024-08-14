@@ -1169,6 +1169,10 @@ pub fn rustc_cargo_env(
         cargo.env("RUSTC_VERIFY_LLVM_IR", "1");
     }
 
+    if builder.config.llvm_enzyme {
+        cargo.rustflag("--cfg=llvm_enzyme");
+    }
+
     // Note that this is disabled if LLVM itself is disabled or we're in a check
     // build. If we are in a check build we still go ahead here presuming we've
     // detected that LLVM is already built and good to go which helps prevent

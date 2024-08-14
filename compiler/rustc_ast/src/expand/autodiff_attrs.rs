@@ -8,7 +8,6 @@ use crate::expand::HashStable_Generic;
 use crate::expand::Encodable;
 use crate::expand::Decodable;
 
-#[allow(dead_code)]
 #[derive(Clone, Copy, Eq, PartialEq, Encodable, Decodable, Debug, HashStable_Generic)]
 pub enum DiffMode {
     Inactive,

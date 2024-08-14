@@ -1136,6 +1136,8 @@ pub struct Resolver<'a, 'tcx> {
     node_id_to_def_id: NodeMap<Feed<'tcx, LocalDefId>>,
     def_id_to_node_id: IndexVec<LocalDefId, ast::NodeId>,
 
+    autodiff_map: Default::default(),
+
     /// Indices of unnamed struct or variant fields with unresolved attributes.
     placeholder_field_indices: FxHashMap<NodeId, usize>,
     /// When collecting definitions from an AST fragment produced by a macro invocation `ExpnId`

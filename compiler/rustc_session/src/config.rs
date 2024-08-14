@@ -192,6 +192,54 @@ impl Default for CoverageLevel {
     }
 }
 
+
+/// The different settings that the `-Z ad` flag can have.
+#[derive(Clone, Copy, PartialEq, Hash, Debug)]
+pub enum AutoDiff {
+    /// Print TypeAnalysis information
+    PrintTA,
+    /// Print ActivityAnalysis Information
+    PrintAA,
+    /// Print Performance Warnings from Enzyme
+    PrintPerf,
+    /// Combines the three print flags above.
+    Print,
+    /// Print the whole module, before running opts.
+    PrintModBefore,
+    /// Print the whole module just before we pass it to Enzyme.
+    /// For Debug purpose, prefer the OPT flag below
+    PrintModAfterOpts,
+    /// Print the module after Enzyme differentiated everything.
+    PrintModAfterEnzyme,
+
+    /// Enzyme's loose type debug helper (can cause incorrect gradients)
+    LooseTypes,
+    /// Output a Module using __enzyme calls to prepare it for opt + enzyme pass usage
+    OPT,
+
+    /// TypeTree options
+    /// TODO: Figure out how to let users construct these,
+    /// or whether we want to leave this option in the first place.
+    TTWidth(u64),
+    TTDepth(u64),
+
+    /// More flags
+    NoModOptAfter,
+    /// Tell Enzyme to run LLVM Opts on each function it generated. By default off,
+    /// since we already optimize the whole module after Enzyme is done.
+    EnableFncOpt,
+    NoVecUnroll,
+    /// Obviously unsafe, disable the length checks that we have for shadow args.
+    NoSafetyChecks,
+    RuntimeActivity,
+    /// Runs Enzyme specific Inlining
+    Inline,
+    /// Runs Optimization twice after AD, and zero times after.
+    /// This is mainly for Benchmarking purpose to show that
+    /// compiler based AD has a performance benefit. TODO: fix
+    AltPipeline,
+}
+
 /// Settings for `-Z instrument-xray` flag.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct InstrumentXRay {
@@ -2998,7 +3046,7 @@ pub(crate) mod dep_tracking {
         LtoCli, NextSolverConfig, OomStrategy, OptLevel, OutFileName, OutputType, OutputTypes,
         PatchableFunctionEntry, Polonius, RemapPathScopeComponents, ResolveDocLinks,
         SourceFileHashAlgorithm, SplitDwarfKind, SwitchWithOptPath, SymbolManglingVersion,
-        WasiExecModel,
+        WasiExecModel, AutoDiff,
     };
     use crate::lint;
     use crate::utils::NativeLib;
@@ -3040,6 +3088,7 @@ pub(crate) mod dep_tracking {
     }
 
     impl_dep_tracking_hash_via_hash!(
+        AutoDiff,
         bool,
         usize,
         NonZero<usize>,

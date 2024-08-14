@@ -98,6 +98,14 @@ use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
+use rustc_ast::expand::autodiff_attrs::{AutoDiffItem, AutoDiffAttrs};
+use rustc_middle::ty::{
+    self, visit::TypeVisitableExt, InstanceDef, ParamEnv, TyCtxt,
+    fnc_typetrees
+};
+use rustc_symbol_mangling::symbol_name_for_instance_in_crate;
+use rustc_ast::expand::autodiff_attrs::DiffActivity;
+
 use rustc_data_structures::fx::{FxIndexMap, FxIndexSet};
 use rustc_data_structures::sync;
 use rustc_data_structures::unord::{UnordMap, UnordSet};
@@ -250,7 +258,14 @@ where
             &mut can_be_internalized,
             export_generics,
         );
-        if visibility == Visibility::Hidden && can_be_internalized {
+
+        // We can't differentiate something that got inlined.
+        let autodiff_active = match characteristic_def_id {
+            Some(def_id) => cx.tcx.autodiff_attrs(def_id).is_active(),
+            None => false,
+        };
+
+        if !autodiff_active && visibility == Visibility::Hidden && can_be_internalized {
             internalization_candidates.insert(mono_item);
         }
         let size_estimate = mono_item.size_estimate(cx.tcx);
@@ -1097,7 +1112,7 @@ where
     }
 }
 
-fn collect_and_partition_mono_items(tcx: TyCtxt<'_>, (): ()) -> (&DefIdSet, &[CodegenUnit<'_>]) {
+fn collect_and_partition_mono_items(tcx: TyCtxt<'_>, (): ()) -> (&DefIdSet, &[AutoDiffItem], &[CodegenUnit<'_>]) {
     let collection_strategy = match tcx.sess.opts.unstable_opts.print_mono_items {
         Some(ref s) => {
             let mode = s.to_lowercase();
@@ -1159,6 +1174,60 @@ fn collect_and_partition_mono_items(tcx: TyCtxt<'_>, (): ()) -> (&DefIdSet, &[Co
         })
         .collect();
 
+    let autodiff_items2: Vec<_> = items
+        .iter()
+        .filter_map(|item| match *item {
+            MonoItem::Fn(ref instance) => Some((item, instance)),
+            _ => None,
+        }).collect();
+    let mut autodiff_items: Vec<AutoDiffItem> = vec![];
+
+    for (item, instance) in autodiff_items2 {
+            let target_id = instance.def_id();
+            let target_attrs: &AutoDiffAttrs = tcx.autodiff_attrs(target_id);
+            let mut input_activities: Vec<DiffActivity> = target_attrs.input_activity.clone();
+            if target_attrs.is_source() {
+                trace!("source found: {:?}", target_id);
+            }
+            if !target_attrs.apply_autodiff() {
+                continue;
+            }
+
+            let target_symbol =
+                symbol_name_for_instance_in_crate(tcx, instance.clone(), LOCAL_CRATE);
+
+            let source =
+                usage_map.used_map.get(&item).unwrap().into_iter().find_map(|item| match *item {
+                    MonoItem::Fn(ref instance_s) => {
+                        let source_id = instance_s.def_id();
+                        if tcx.autodiff_attrs(source_id).is_active() {
+                            return Some(instance_s);
+                        }
+                        None
+                    }
+                    _ => None,
+                });
+            let inst = match source {
+                Some(source) => source,
+                None => continue,
+            };
+
+            println!("source_id: {:?}", inst.def_id());
+            let fn_ty = inst.ty(tcx, ParamEnv::empty());
+            assert!(fn_ty.is_fn());
+            let span = tcx.def_span(inst.def_id());
+            let fnc_tree = fnc_typetrees(tcx, fn_ty, &mut input_activities, Some(span));
+            let (inputs, output) = (fnc_tree.args, fnc_tree.ret);
+            //check_types(inst.ty(tcx, ParamEnv::empty()), tcx, &target_attrs.input_activity);
+            let symb = symbol_name_for_instance_in_crate(tcx, inst.clone(), LOCAL_CRATE);
+
+            let mut new_target_attrs = target_attrs.clone();
+            new_target_attrs.input_activity = input_activities;
+            let itm = new_target_attrs.into_item(symb, target_symbol, inputs, output);
+            autodiff_items.push(itm);
+    };
+    let autodiff_items = tcx.arena.alloc_from_iter(autodiff_items);
+
     // Output monomorphization stats per def_id
     if let SwitchWithOptPath::Enabled(ref path) = tcx.sess.opts.unstable_opts.dump_mono_stats {
         if let Err(err) =
@@ -1219,7 +1288,14 @@ fn collect_and_partition_mono_items(tcx: TyCtxt<'_>, (): ()) -> (&DefIdSet, &[Co
         }
     }
 
-    (tcx.arena.alloc(mono_items), codegen_units)
+    if autodiff_items.len() > 0 {
+        trace!("AUTODIFF ITEMS EXIST");
+        for item in &mut *autodiff_items {
+            trace!("{}", &item);
+        }
+    }
+
+    (tcx.arena.alloc(mono_items), autodiff_items, codegen_units)
 }
 
 /// Outputs stats about instantiation counts and estimated size, per `MonoItem`'s
@@ -1304,12 +1380,12 @@ pub fn provide(providers: &mut Providers) {
     providers.collect_and_partition_mono_items = collect_and_partition_mono_items;
 
     providers.is_codegened_item = |tcx, def_id| {
-        let (all_mono_items, _) = tcx.collect_and_partition_mono_items(());
+        let (all_mono_items, _, _) = tcx.collect_and_partition_mono_items(());
         all_mono_items.contains(&def_id)
     };
 
     providers.codegen_unit = |tcx, name| {
-        let (_, all) = tcx.collect_and_partition_mono_items(());
+        let (_, _, all) = tcx.collect_and_partition_mono_items(());
         all.iter()
             .find(|cgu| cgu.name() == name)
             .unwrap_or_else(|| panic!("failed to find cgu with name {name:?}"))

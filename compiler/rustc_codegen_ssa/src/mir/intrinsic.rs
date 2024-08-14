@@ -1,3 +1,7 @@
+use rustc_middle::ty::typetree_from;
+use rustc_ast::expand::typetree::{TypeTree, FncTree};
+use crate::rustc_middle::ty::layout::HasTyCtxt;
+
 use rustc_middle::ty::{self, Ty, TyCtxt};
 use rustc_middle::{bug, span_bug};
 use rustc_session::config::OptLevel;
@@ -21,16 +25,23 @@ fn copy_intrinsic<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
     src: Bx::Value,
     count: Bx::Value,
 ) {
+    let tcx: TyCtxt<'_> = bx.cx().tcx();
+    let tt: TypeTree = typetree_from(tcx, ty);
+    let fnc_tree: FncTree = FncTree {
+        args: vec![tt.clone(), tt.clone(), TypeTree::all_ints()],
+        ret: TypeTree::new(),
+    };
+
     let layout = bx.layout_of(ty);
     let size = layout.size;
     let align = layout.align.abi;
     let size = bx.mul(bx.const_usize(size.bytes()), count);
     let flags = if volatile { MemFlags::VOLATILE } else { MemFlags::empty() };
+    trace!("copy: mir ty: {:?}, enzyme tt: {:?}", ty, fnc_tree);
     if allow_overlap {
-        bx.memmove(dst, align, src, align, size, flags);
+        bx.memmove(dst, align, src, align, size, flags, Some(fnc_tree));
     } else {
-        bx.memcpy(dst, align, src, align, size, flags);
-    }
+        bx.memcpy(dst, align, src, align, size, flags, Some(fnc_tree));
 }
 
 fn memset_intrinsic<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
@@ -41,12 +52,19 @@ fn memset_intrinsic<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
     val: Bx::Value,
     count: Bx::Value,
 ) {
+    let tcx: TyCtxt<'_> = bx.cx().tcx();
+    let tt: TypeTree = typetree_from(tcx, ty);
+    let fnc_tree: FncTree = FncTree {
+        args: vec![tt.clone(), tt.clone(), TypeTree::all_ints()],
+        ret: TypeTree::new(),
+    };
+
     let layout = bx.layout_of(ty);
     let size = layout.size;
     let align = layout.align.abi;
     let size = bx.mul(bx.const_usize(size.bytes()), count);
     let flags = if volatile { MemFlags::VOLATILE } else { MemFlags::empty() };
-    bx.memset(dst, val, size, align, flags);
+    bx.memset(dst, val, size, align, flags, Some(fnc_tree));
 }
 
 impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
