@@ -1,4 +1,4 @@
-use crate::ty::{self, Ty, FieldsShape};
+use crate::ty::{self, Ty, FieldsShape, TypeAndMut};
 use rustc_ast::expand::typetree::{Type, TypeTree, FncTree, Kind};
 //, Type, Kind, TypeTree, FncTree, FieldsShape};
 use super::context::TyCtxt;
@@ -8,7 +8,7 @@ use crate::error::AutodiffUnsafeInnerConstRef;
 use super::adt::*;
 use rustc_hir as hir;
 use rustc_type_ir::Adt;
-
+use tracing::trace;
 
 pub fn typetree_from<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> TypeTree {
     let mut visited = vec![];
@@ -128,9 +128,8 @@ fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize, safety: bool,
             unimplemented!("what to do whith fn ptr?");
         }
 
-        let inner_ty_and_mut = ty.builtin_deref(true).unwrap();
-        let is_mut = inner_ty_and_mut.mutbl == hir::Mutability::Mut;
-        let inner_ty = inner_ty_and_mut.ty;
+        let inner_ty = ty.builtin_deref(true).unwrap();
+        let is_mut = inner_ty.is_mutable_ptr();
 
         // Now account for inner mutability.
         if !is_mut && depth > 0 && safety {
@@ -149,7 +148,7 @@ fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize, safety: bool,
 
             tcx.sess
             .dcx()
-            .emit_warning(AutodiffUnsafeInnerConstRef{span, ty: ptr_ty});
+            .emit_warn(AutodiffUnsafeInnerConstRef{span, ty: ptr_ty});
         }
 
         //visited.push(inner_ty);

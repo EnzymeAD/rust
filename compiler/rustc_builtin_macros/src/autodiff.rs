@@ -1,23 +1,24 @@
 use crate::errors;
-//use rustc_ast::expand::autodiff_attrs::{AutoDiffAttrs, DiffActivity, DiffMode, is_fwd, is_rev, valid_input_activity, valid_ty_for_activity};
-//use rustc_ast::ptr::P;
-//use rustc_ast::token::{Token, TokenKind};
-//use rustc_ast::tokenstream::*;
-//use rustc_ast::FnRetTy;
-use rustc_ast::{self as ast};//, FnHeader, FnSig, Generics, MetaItemKind, NestedMetaItem, StmtKind};
-//use rustc_ast::ByRef;
-//use rustc_ast::{BindingAnnotation, ByRef};
-//use rustc_ast::{Fn, ItemKind, PatKind, Stmt, TyKind};
-//use rustc_ast::{Fn, ItemKind, PatKind, Stmt, TyKind, Unsafe};
+use rustc_ast::expand::autodiff_attrs::{AutoDiffAttrs, DiffActivity, DiffMode, is_fwd, is_rev, valid_input_activity, valid_ty_for_activity};
+use rustc_ast::ptr::P;
+use rustc_ast::token::{Token, TokenKind};
+use rustc_ast::tokenstream::*;
+use rustc_ast::FnRetTy;
+use rustc_ast::{self as ast, NestedMetaItem};//, FnHeader, FnSig, Generics, MetaItemKind, NestedMetaItem, StmtKind};
+use rustc_ast::{ItemKind, PatKind, TyKind};
 use rustc_expand::base::{Annotatable, ExtCtxt};
-//use rustc_span::symbol::{kw, sym, Ident};
+use rustc_span::symbol::{kw, sym, Ident};
 use rustc_span::Span;
-//use rustc_span::Symbol;
-//use std::string::String;
-//use thin_vec::{thin_vec, ThinVec};
-//use std::str::FromStr;
+use rustc_span::Symbol;
+use std::string::String;
+use thin_vec::{thin_vec, ThinVec};
+use std::str::FromStr;
+use rustc_ast::ast::Generics;
+use rustc_ast::FnSig;
 
-//use rustc_ast::AssocItemKind;
+use rustc_ast::AssocItemKind;
+use tracing::trace;
+
 
 #[cfg(not(llvm_enzyme))]
 pub fn expand(
@@ -151,7 +152,7 @@ pub fn expand(
     if !sig.decl.output.has_ret() {
         // We don't want users to provide a return activity if the function doesn't return anything.
         // For simplicity, we just add a dummy token to the end of the list.
-        let t = Token::new(TokenKind::Ident(sym::None, false), Span::default());
+        let t = Token::new(TokenKind::Ident(sym::None, false.into()), Span::default());
         ts.push(TokenTree::Token(t, Spacing::Joint));
     }
     let ts: TokenStream = TokenStream::from_iter(ts);
@@ -195,7 +196,7 @@ pub fn expand(
         P(ast::NormalAttr::from_ident(Ident::with_dummy_span(sym::rustc_autodiff)));
     let ts2: Vec<TokenTree> = vec![
             TokenTree::Token(
-            Token::new(TokenKind::Ident(sym::never, false), span),
+            Token::new(TokenKind::Ident(sym::never, false.into()), span),
             Spacing::Joint,
         )];
     let never_arg = ast::DelimArgs {
@@ -204,6 +205,7 @@ pub fn expand(
         tokens: ast::tokenstream::TokenStream::from_iter(ts2),
     };
     let inline_item = ast::AttrItem {
+        unsafety: ast::Safety::Default,
         path: ast::Path::from_ident(Ident::with_dummy_span(sym::inline)),
         args: ast::AttrArgs::Delimited(never_arg),
         tokens: None,
@@ -322,7 +324,7 @@ fn gen_enzyme_body(
     let blackbox_path = ecx.std_path(&[Symbol::intern("hint"), Symbol::intern("black_box")]);
     let empty_loop_block = ecx.block(span, ThinVec::new());
     let noop = ast::InlineAsm {
-        template: vec![ast::InlineAsmTemplatePiece::String("NOP".to_string())],
+        template: vec![ast::InlineAsmTemplatePiece::String("NOP".to_string().into())],
         template_strs: Box::new([]),
         operands: vec![],
         clobber_abis: vec![],
@@ -509,6 +511,8 @@ fn gen_enzyme_decl(
     x: &AutoDiffAttrs,
     span: Span,
 ) -> (ast::FnSig, Vec<String>, Vec<Ident>) {
+    use ast::BindingMode;
+
     let sig_args = sig.decl.inputs.len() + if sig.decl.output.has_ret() { 1 } else { 0 };
     let num_activities = x.input_activity.len() + if x.has_ret_activity() { 1 } else { 0 };
     if sig_args != num_activities {
@@ -560,7 +564,7 @@ fn gen_enzyme_decl(
                 shadow_arg.pat = P(ast::Pat {
                     // TODO: Check id
                     id: ast::DUMMY_NODE_ID,
-                    kind: PatKind::Ident(BindingAnnotation::NONE, ident, None),
+                    kind: PatKind::Ident(BindingMode::NONE, ident, None),
                     span: shadow_arg.pat.span,
                     tokens: shadow_arg.pat.tokens.clone(),
                 });
@@ -580,7 +584,7 @@ fn gen_enzyme_decl(
                 shadow_arg.pat = P(ast::Pat {
                     // TODO: Check id
                     id: ast::DUMMY_NODE_ID,
-                    kind: PatKind::Ident(BindingAnnotation::NONE, ident, None),
+                    kind: PatKind::Ident(BindingMode::NONE, ident, None),
                     span: shadow_arg.pat.span,
                     tokens: shadow_arg.pat.tokens.clone(),
                 });
@@ -624,7 +628,7 @@ fn gen_enzyme_decl(
                     ty: ty.clone(),
                     pat: P(ast::Pat {
                         id: ast::DUMMY_NODE_ID,
-                        kind: PatKind::Ident(BindingAnnotation::NONE, ident, None),
+                        kind: PatKind::Ident(BindingMode::NONE, ident, None),
                         span: ty.span,
                         tokens: None,
                     }),

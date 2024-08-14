@@ -536,7 +536,6 @@ symbols! {
         cfg_attr_multi,
         cfg_autodiff_fallback,
         cfg_doctest,
-        cfg_autodiff_fallback,
         cfg_eval,
         cfg_hide,
         cfg_overflow_checks,
