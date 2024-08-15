@@ -379,6 +379,11 @@ extern "C" void LLVMRustRemoveEnumAttributeAtIndex(LLVMValueRef F, size_t index,
   LLVMRemoveEnumAttributeAtIndex(F, index, fromRust(RustAttr));
 }
 
+extern "C" LLVMAttributeRef
+LLVMRustCreateAttrNoValue(LLVMContextRef C, LLVMRustAttribute RustAttr) {
+  return wrap(Attribute::get(*unwrap(C), fromRust(RustAttr)));
+}
+
 extern "C" void LLVMRustAddEnumAttributeAtIndex(LLVMContextRef C,
                                                 LLVMValueRef F, size_t index,
                                                 LLVMRustAttribute RustAttr) {
@@ -389,11 +394,6 @@ extern "C" LLVMAttributeRef
 LLVMRustGetEnumAttributeAtIndex(LLVMValueRef F, size_t index,
                                 LLVMRustAttribute RustAttr) {
   return LLVMGetEnumAttributeAtIndex(F, index, fromRust(RustAttr));
-}
-
-extern "C" LLVMAttributeRef
-LLVMRustCreateAttrNoValue(LLVMContextRef C, LLVMRustAttribute RustAttr) {
-  return wrap(Attribute::get(*unwrap(C), fromRust(RustAttr)));
 }
 
 extern "C" LLVMAttributeRef LLVMRustCreateAlignmentAttr(LLVMContextRef C,

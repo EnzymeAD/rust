@@ -1508,6 +1508,7 @@ impl<'a, 'tcx> Resolver<'a, 'tcx> {
             next_node_id: CRATE_NODE_ID,
             node_id_to_def_id,
             def_id_to_node_id,
+            autodiff_map: Default::default(),
             placeholder_field_indices: Default::default(),
             invocation_parents,
             trait_impl_items: Default::default(),
@@ -1637,6 +1638,7 @@ impl<'a, 'tcx> Resolver<'a, 'tcx> {
                 .into_items()
                 .map(|(k, f)| (k, f.key()))
                 .collect(),
+            autodiff_map: self.autodiff_map,
             trait_map: self.trait_map,
             lifetime_elision_allowed: self.lifetime_elision_allowed,
             lint_buffer: Steal::new(self.lint_buffer),
