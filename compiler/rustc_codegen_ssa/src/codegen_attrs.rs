@@ -781,9 +781,9 @@ fn autodiff_attrs(tcx: TyCtxt<'_>, id: DefId) -> AutoDiffAttrs {
         0 => return AutoDiffAttrs::inactive(),
         1 => attrs.get(0).unwrap(),
         _ => {
-            tcx.sess
+            tcx.dcx()
                 .struct_span_err(attrs[1].span, msg_once)
-                .span_label(attrs[1].span, "more than one")
+                .with_note("more than one")
                 .emit();
             return AutoDiffAttrs::inactive();
         }
@@ -797,9 +797,9 @@ fn autodiff_attrs(tcx: TyCtxt<'_>, id: DefId) -> AutoDiffAttrs {
     }
 
     let [mode, input_activities @ .., ret_activity] = &list[..] else {
-        tcx.sess
+        tcx.dcx()
             .struct_span_err(attr.span, msg_once)
-            .span_label(attr.span, "Implementation bug in autodiff_attrs. Please report this!")
+            .with_note("Implementation bug in autodiff_attrs. Please report this!")
             .emit();
         return AutoDiffAttrs::inactive();
     };
@@ -807,9 +807,9 @@ fn autodiff_attrs(tcx: TyCtxt<'_>, id: DefId) -> AutoDiffAttrs {
         p1.segments.first().unwrap().ident
     } else {
         let msg = "autodiff attribute must contain autodiff mode";
-        tcx.sess
+        tcx.dcx()
             .struct_span_err(attr.span, msg)
-            .span_label(attr.span, "empty argument list")
+            .with_note("empty argument list")
             .emit();
         return AutoDiffAttrs::inactive();
     };
@@ -822,9 +822,9 @@ fn autodiff_attrs(tcx: TyCtxt<'_>, id: DefId) -> AutoDiffAttrs {
         "ForwardFirst" => DiffMode::ForwardFirst,
         "ReverseFirst" => DiffMode::ReverseFirst,
         _ => {
-            tcx.sess
+            tcx.dcx()
                 .struct_span_err(attr.span, msg_mode)
-                .span_label(attr.span, "invalid mode")
+                .with_note("invalid mode")
                 .emit();
             return AutoDiffAttrs::inactive();
         }
@@ -835,9 +835,9 @@ fn autodiff_attrs(tcx: TyCtxt<'_>, id: DefId) -> AutoDiffAttrs {
         p1.segments.first().unwrap().ident
     } else {
         let msg = "autodiff attribute must contain the return activity";
-        tcx.sess
+        tcx.dcx()
             .struct_span_err(attr.span, msg)
-            .span_label(attr.span, "missing return activity")
+            .with_note("missing return activity")
             .emit();
         return AutoDiffAttrs::inactive();
     };
@@ -847,9 +847,9 @@ fn autodiff_attrs(tcx: TyCtxt<'_>, id: DefId) -> AutoDiffAttrs {
     let ret_activity = match DiffActivity::from_str(ret_symbol.as_str()) {
         Ok(x) => x,
         Err(_) => {
-            tcx.sess
+            tcx.dcx()
                 .struct_span_err(attr.span, msg_unknown_ret_activity)
-                .span_label(attr.span, "invalid return activity")
+                .with_note("invalid return activity")
                 .emit();
             return AutoDiffAttrs::inactive();
         }
@@ -862,9 +862,9 @@ fn autodiff_attrs(tcx: TyCtxt<'_>, id: DefId) -> AutoDiffAttrs {
         let arg_symbol = if let NestedMetaItem::MetaItem(MetaItem { path: ref p2, .. }) = arg {
             p2.segments.first().unwrap().ident
         } else {
-            tcx.sess
+            tcx.dcx()
                 .struct_span_err(attr.span, msg_arg_activity)
-                .span_label(attr.span, "Implementation bug, please report this!")
+                .with_note("Implementation bug, please report this!")
                 .emit();
             return AutoDiffAttrs::inactive();
         };
@@ -872,9 +872,9 @@ fn autodiff_attrs(tcx: TyCtxt<'_>, id: DefId) -> AutoDiffAttrs {
         match DiffActivity::from_str(arg_symbol.as_str()) {
             Ok(arg_activity) => arg_activities.push(arg_activity),
             Err(_) => {
-                tcx.sess
+                tcx.dcx()
                     .struct_span_err(attr.span, msg_unknown_ret_activity)
-                    .span_label(attr.span, "invalid input activity")
+                    .with_note("invalid input activity")
                     .emit();
                 return AutoDiffAttrs::inactive();
             }
@@ -889,9 +889,9 @@ fn autodiff_attrs(tcx: TyCtxt<'_>, id: DefId) -> AutoDiffAttrs {
         msg = format!("Invalid return activity {} for {} mode", ret_activity, mode);
     }
     if msg != "".to_string() {
-        tcx.sess
+        tcx.dcx()
             .struct_span_err(attr.span, msg)
-            .span_label(attr.span, "invalid activity")
+            .with_note("invalid activity")
             .emit();
         return AutoDiffAttrs::inactive();
     }

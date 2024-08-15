@@ -5,7 +5,6 @@ use rustc_data_structures::{fx::FxHashMap, memmap::Mmap};
 use std::ffi::CString;
 use std::sync::Arc;
 
-use rustc_data_structures::memmap::Mmap;
 use rustc_errors::FatalError;
 
 use super::write::CodegenContext;

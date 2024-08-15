@@ -1,6 +1,7 @@
+use tracing::trace;
 use rustc_middle::ty::typetree_from;
 use rustc_ast::expand::typetree::{TypeTree, FncTree};
-use crate::rustc_middle::ty::layout::HasTyCtxt;
+use rustc_middle::ty::layout::HasTyCtxt;
 
 use rustc_middle::ty::{self, Ty, TyCtxt};
 use rustc_middle::{bug, span_bug};
@@ -42,6 +43,7 @@ fn copy_intrinsic<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
         bx.memmove(dst, align, src, align, size, flags, Some(fnc_tree));
     } else {
         bx.memcpy(dst, align, src, align, size, flags, Some(fnc_tree));
+    }
 }
 
 fn memset_intrinsic<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(

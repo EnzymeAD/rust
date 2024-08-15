@@ -424,7 +424,7 @@ fn generate_lto_work<B: ExtraBackendMethods>(
     } else {
         if !autodiff.is_empty() {
             let dcx = cgcx.create_dcx();
-            dcx.emit_fatal(AutodiffWithoutLto{});
+            dcx.handle().emit_fatal(AutodiffWithoutLto{});
         }
         assert!(needs_fat_lto.is_empty());
         let (lto_modules, copy_jobs) = B::run_thin_lto(cgcx, needs_thin_lto, import_only_modules)

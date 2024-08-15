@@ -92,6 +92,7 @@
 //! source-level module, functions from the same module will be available for
 //! inlining, even when they are not marked `#[inline]`.
 
+use tracing::trace;
 use std::cmp;
 use std::collections::hash_map::Entry;
 use std::fs::{self, File};
@@ -100,7 +101,7 @@ use std::path::{Path, PathBuf};
 
 use rustc_ast::expand::autodiff_attrs::{AutoDiffItem, AutoDiffAttrs};
 use rustc_middle::ty::{
-    self, visit::TypeVisitableExt, InstanceDef, ParamEnv, TyCtxt,
+    self, visit::TypeVisitableExt, ParamEnv, TyCtxt,
     fnc_typetrees
 };
 use rustc_symbol_mangling::symbol_name_for_instance_in_crate;
@@ -121,8 +122,7 @@ use rustc_middle::mir::mono::{
     Visibility,
 };
 use rustc_middle::ty::print::{characteristic_def_id_of_type, with_no_trimmed_paths};
-use rustc_middle::ty::visit::TypeVisitableExt;
-use rustc_middle::ty::{self, InstanceKind, TyCtxt};
+use rustc_middle::ty::InstanceKind;
 use rustc_middle::util::Providers;
 use rustc_session::config::{DumpMonoStatsFormat, SwitchWithOptPath};
 use rustc_session::CodegenUnits;

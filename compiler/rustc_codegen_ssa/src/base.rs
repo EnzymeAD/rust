@@ -1,6 +1,3 @@
-use rustc_middle::ty::typetree_from;
-use rustc_ast::expand::typetree::{TypeTree, FncTree};
-
 use std::cmp;
 use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
