@@ -936,7 +936,7 @@ unsafe fn add_panic_msg_to_global<'a>(llmod: &'a llvm::Module, llcx: &'a llvm::C
     let msg_len = msg.len();
 
     // Create the array type
-    let i8_array_type = LLVMRustArrayType(LLVMInt8TypeInContext(llcx), msg_len as u64);
+    let i8_array_type = LLVMArrayType2(LLVMInt8TypeInContext(llcx), msg_len as u64);
 
     // Create the string constant
     let string_const_val = LLVMConstStringInContext2(llcx, cmsg.as_ptr() as *const i8, msg_len as usize, 0);
