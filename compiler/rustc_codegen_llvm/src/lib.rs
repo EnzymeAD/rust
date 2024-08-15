@@ -30,7 +30,6 @@ use std::mem::ManuallyDrop;
 
 use back::owned_target_machine::OwnedTargetMachine;
 use back::write::{create_informational_target_machine, create_target_machine};
-use errors::ParseTargetMachineConfig;
 pub use llvm_util::target_features;
 use rustc_ast::expand::allocator::AllocatorKind;
 use rustc_codegen_ssa::back::lto::{LtoModuleCodegen, SerializedModule, ThinModule};
@@ -265,7 +264,7 @@ impl WriteBackendMethods for LlvmCodegenBackend {
     ) -> Result<(), FatalError> {
         if cgcx.lto != Lto::Fat {
             let dcx = cgcx.create_dcx();
-            return Err(dcx.emit_almost_fatal(AutoDiffWithoutLTO{}));
+            return Err(dcx.handle().emit_almost_fatal(AutoDiffWithoutLTO{}));
         }
         unsafe { back::write::differentiate(module, cgcx, diff_fncs, typetrees, config) }
     }

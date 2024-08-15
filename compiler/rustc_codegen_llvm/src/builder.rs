@@ -39,6 +39,7 @@ use crate::type_of::LayoutLlvmExt;
 use crate::value::Value;
 use crate::{attributes, llvm_util};
 
+use tracing::trace;
 
 pub fn add_tt2<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context, fn_def: &'ll Value, tt: FncTree) {
     let inputs = tt.args;

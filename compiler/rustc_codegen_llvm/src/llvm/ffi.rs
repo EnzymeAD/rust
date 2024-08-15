@@ -1,6 +1,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_upper_case_globals)]
 
+use tracing::trace;
 use std::marker::PhantomData;
 
 use libc::{c_char, c_int, c_uint, c_ulonglong, c_void, size_t};
@@ -887,7 +888,7 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
     // We don't support volatile / extern / (global?) values.
     // Just because I didn't had time to test them, and it seems less urgent.
     let args_uncacheable = vec![0; input_activity.len()];
-    let num_fnc_args = LLVMCountParams(fnc);
+    let num_fnc_args = unsafe{LLVMCountParams(fnc)};
     trace!("num_fnc_args: {}", num_fnc_args);
     trace!("input_activity.len(): {}", input_activity.len());
     assert!(num_fnc_args == input_activity.len() as u32);
@@ -914,7 +915,7 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
         trace!("input_activity i: {}", &i);
     }
     trace!("before calling Enzyme");
-    let res = EnzymeCreateForwardDiff(
+    let res = unsafe {EnzymeCreateForwardDiff(
         logic_ref, // Logic
         std::ptr::null(),
         std::ptr::null(),
@@ -932,7 +933,7 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
         args_uncacheable.as_ptr(),
         args_uncacheable.len(), // uncacheable arguments
         std::ptr::null_mut(),   // write augmented function to this
-    );
+    )};
     trace!("after calling Enzyme");
     (res, vec![])
 }
@@ -975,7 +976,7 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
     // We don't support volatile / extern / (global?) values.
     // Just because I didn't had time to test them, and it seems less urgent.
     let args_uncacheable = vec![0; input_activity.len()];
-    let num_fnc_args = LLVMCountParams(fnc);
+    let num_fnc_args = unsafe {LLVMCountParams(fnc)};
     println!("num_fnc_args: {}", num_fnc_args);
     println!("input_activity.len(): {}", input_activity.len());
     assert!(num_fnc_args == input_activity.len() as u32);
@@ -1001,7 +1002,7 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
         trace!("input_activity i: {}", &i);
     }
     trace!("before calling Enzyme");
-    let res = EnzymeCreatePrimalAndGradient(
+    let res = unsafe {EnzymeCreatePrimalAndGradient(
         logic_ref, // Logic
         std::ptr::null(),
         std::ptr::null(),
@@ -1022,7 +1023,7 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
         args_uncacheable.len(), // uncacheable arguments
         std::ptr::null_mut(),   // write augmented function to this
         0,
-    );
+    )};
     trace!("after calling Enzyme");
     (res, primal_sizes)
 }

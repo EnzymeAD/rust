@@ -40,14 +40,13 @@ use rustc_ast::expand::autodiff_attrs::{AutoDiffItem, DiffActivity, DiffMode};
 use rustc_ast::expand::typetree::FncTree;
 use rustc_data_structures::fx::FxHashMap;
 
-
 use std::ffi::{CStr, CString};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{fs, slice, str};
 
-use libc::{c_char, c_int, c_void, size_t};
+use libc::{c_char, c_int, c_uint, c_void, size_t};
 use llvm::{
     LLVMRustLLVMHasZlibCompressionForDebugSymbols, LLVMRustLLVMHasZstdCompressionForDebugSymbols,
 };
@@ -85,6 +84,8 @@ use crate::llvm::diagnostic::OptimizationDiagnosticKind;
 use crate::llvm::{self, DiagnosticInfo, PassManager};
 use crate::type_::Type;
 use crate::{base, common, llvm_util, LlvmCodegenBackend, ModuleLlvm};
+
+use tracing::trace;
 
 pub fn llvm_err<'a>(dcx: DiagCtxtHandle<'_>, err: LlvmError<'a>) -> FatalError {
     match llvm::last_error() {
@@ -723,6 +724,7 @@ fn get_params(fnc: &Value) -> Vec<&Value> {
 
 unsafe fn create_call<'a>(tgt: &'a Value, src: &'a Value, rev_mode: bool,
     llmod: &'a llvm::Module, llcx: &llvm::Context, size_positions: &[usize], ad: &[AutoDiff]) {
+    unsafe {
 
    // first, remove all calls from fnc
    let bb = LLVMGetFirstBasicBlock(tgt);
@@ -890,14 +892,15 @@ unsafe fn create_call<'a>(tgt: &'a Value, src: &'a Value, rev_mode: bool,
     LLVMDisposeBuilder(builder);
     let _fnc_ok =
         LLVMVerifyFunction(tgt, llvm::LLVMVerifierFailureAction::LLVMAbortProcessAction);
+    }
 }
 
 unsafe fn get_panic_name(llmod: &llvm::Module) -> CString {
     // The names are mangled and their ending changes based on a hash, so just take whichever.
-    let mut f = LLVMGetFirstFunction(llmod);
+    let mut f = unsafe{LLVMGetFirstFunction(llmod)};
     loop {
         if let Some(lf) = f {
-            f = LLVMGetNextFunction(lf);
+            f = unsafe {LLVMGetNextFunction(lf)};
             let fnc_name = llvm::get_value_name(lf);
             let fnc_name: String = String::from_utf8(fnc_name.to_vec()).unwrap();
             if fnc_name.starts_with("_ZN4core9panicking14panic_explicit") {
@@ -919,6 +922,7 @@ unsafe fn get_panic_name(llmod: &llvm::Module) -> CString {
 // TODO: Pick a panic function which allows displaying an errormessage.
 // TODO: We probably want to keep a handle at higher level and pass it down instead of searching.
 unsafe fn add_panic_msg_to_global<'a>(llmod: &'a llvm::Module, llcx: &'a llvm::Context) -> &'a llvm::Value {
+    unsafe {
     use llvm::*;
 
     // Convert the message to a CString
@@ -957,7 +961,9 @@ unsafe fn add_panic_msg_to_global<'a>(llmod: &'a llvm::Module, llcx: &'a llvm::C
     LLVMSetInitializer(global_var, struct_initializer);
 
     global_var
+    }
 }
+use rustc_errors::DiagCtxt;
 
 // As unsafe as it can be.
 #[allow(unused_variables)]
@@ -980,12 +986,12 @@ pub(crate) unsafe fn enzyme_ad(
     // get target and source function
     let name = CString::new(rust_name.to_owned()).unwrap();
     let name2 = CString::new(rust_name2.clone()).unwrap();
-    let src_fnc_opt = llvm::LLVMGetNamedFunction(llmod, name.as_c_str().as_ptr());
+    let src_fnc_opt = unsafe {llvm::LLVMGetNamedFunction(llmod, name.as_c_str().as_ptr())};
     let src_fnc = match src_fnc_opt {
         Some(x) => x,
         None => {
             return Err(llvm_err(
-                diag_handler,
+                diag_handler.handle(),
                 LlvmError::PrepareAutoDiff {
                     src: rust_name.to_owned(),
                     target: rust_name2.to_owned(),
@@ -994,12 +1000,12 @@ pub(crate) unsafe fn enzyme_ad(
             ));
         }
     };
-    let target_fnc_opt = llvm::LLVMGetNamedFunction(llmod, name2.as_ptr());
+    let target_fnc_opt = unsafe {llvm::LLVMGetNamedFunction(llmod, name2.as_ptr())};
     let target_fnc = match target_fnc_opt {
         Some(x) => x,
         None => {
             return Err(llvm_err(
-                diag_handler,
+                diag_handler.handle(),
                 LlvmError::PrepareAutoDiff {
                     src: rust_name.to_owned(),
                     target: rust_name2.to_owned(),
@@ -1008,8 +1014,8 @@ pub(crate) unsafe fn enzyme_ad(
             ));
         }
     };
-    let src_num_args = llvm::LLVMCountParams(src_fnc);
-    let target_num_args = llvm::LLVMCountParams(target_fnc);
+    let src_num_args = unsafe {llvm::LLVMCountParams(src_fnc)};
+    let target_num_args = unsafe {llvm::LLVMCountParams(target_fnc)};
     // A really simple check
     assert!(src_num_args <= target_num_args);
 
@@ -1024,7 +1030,7 @@ pub(crate) unsafe fn enzyme_ad(
     let output_tt = to_enzyme_typetree(item.output, llvm_data_layout, llcx);
 
     let type_analysis: EnzymeTypeAnalysisRef =
-        CreateTypeAnalysis(logic_ref, std::ptr::null_mut(), std::ptr::null_mut(), 0);
+        unsafe {CreateTypeAnalysis(logic_ref, std::ptr::null_mut(), std::ptr::null_mut(), 0)};
 
     llvm::set_strict_aliasing(false);
 
@@ -1049,40 +1055,42 @@ pub(crate) unsafe fn enzyme_ad(
         _ => unreachable!(),
     };
 
-    let void_type = LLVMVoidTypeInContext(llcx);
-    let return_type = LLVMGetReturnType(LLVMGlobalGetValueType(src_fnc));
-    let void_ret = void_type == return_type;
-    let mut tmp = match mode {
-        DiffMode::Forward => enzyme_rust_forward_diff(
-            logic_ref,
-            type_analysis,
-            src_fnc,
-            args_activity,
-            ret_activity,
-            input_tts,
-            output_tt,
-            void_ret,
-        ),
-        DiffMode::Reverse => enzyme_rust_reverse_diff(
-            logic_ref,
-            type_analysis,
-            src_fnc,
-            args_activity,
-            ret_activity,
-            input_tts,
-            output_tt,
-        ),
-        _ => unreachable!(),
-    };
-    let mut res: &Value = tmp.0;
-    let size_positions: Vec<usize> = tmp.1;
+    unsafe {
+        let void_type = LLVMVoidTypeInContext(llcx);
+        let return_type = LLVMGetReturnType(LLVMGlobalGetValueType(src_fnc));
+        let void_ret = void_type == return_type;
+        let mut tmp = match mode {
+            DiffMode::Forward => enzyme_rust_forward_diff(
+                logic_ref,
+                type_analysis,
+                src_fnc,
+                args_activity,
+                ret_activity,
+                input_tts,
+                output_tt,
+                void_ret,
+            ),
+            DiffMode::Reverse => enzyme_rust_reverse_diff(
+                logic_ref,
+                type_analysis,
+                src_fnc,
+                args_activity,
+                ret_activity,
+                input_tts,
+                output_tt,
+            ),
+            _ => unreachable!(),
+        };
+        let mut res: &Value = tmp.0;
+        let size_positions: Vec<usize> = tmp.1;
 
-    let f_return_type = LLVMGetReturnType(LLVMGlobalGetValueType(res));
+        let f_return_type = LLVMGetReturnType(LLVMGlobalGetValueType(res));
 
-    let rev_mode = item.attrs.mode == DiffMode::Reverse;
-    create_call(target_fnc, res, rev_mode, llmod, llcx, &size_positions, ad);
-    // TODO: implement drop for wrapper type?
-    FreeTypeAnalysis(type_analysis);
+        let rev_mode = item.attrs.mode == DiffMode::Reverse;
+        create_call(target_fnc, res, rev_mode, llmod, llcx, &size_positions, ad);
+        // TODO: implement drop for wrapper type?
+        FreeTypeAnalysis(type_analysis);
+    }
 
     Ok(())
 }
@@ -1122,7 +1130,7 @@ pub(crate) unsafe fn differentiate(
             ret: item.output.clone(),
         };
         let name = CString::new(item.source.clone()).unwrap();
-        let fn_def: &llvm::Value = llvm::LLVMGetNamedFunction(llmod, name.as_ptr()).unwrap();
+        let fn_def: &llvm::Value = unsafe {llvm::LLVMGetNamedFunction(llmod, name.as_ptr()).unwrap()};
         crate::builder::add_tt2(llmod, llcx, fn_def, tt);
 
         // Before dumping the module, we also might want to add dummy functions,  which will
@@ -1182,10 +1190,10 @@ pub(crate) unsafe fn differentiate(
 
     // If a function is a base for some higher order ad, always optimize
     let fnc_opt_base = true;
-    let logic_ref_opt: EnzymeLogicRef = CreateEnzymeLogic(fnc_opt_base as u8);
+    let logic_ref_opt: EnzymeLogicRef = unsafe {CreateEnzymeLogic(fnc_opt_base as u8)};
 
     for item in first_order_items {
-        let res = enzyme_ad(llmod, llcx, &diag_handler, item, logic_ref_opt, ad);
+        let res = unsafe{enzyme_ad(llmod, llcx, &diag_handler.handle(), item, logic_ref_opt, ad)};
         assert!(res.is_ok());
     }
 
@@ -1196,44 +1204,44 @@ pub(crate) unsafe fn differentiate(
             dbg!("Enable extra optimizations for Enzyme");
             logic_ref_opt
         }
-        false => CreateEnzymeLogic(fnc_opt as u8),
+        false => unsafe {CreateEnzymeLogic(fnc_opt as u8)},
     };
     for item in higher_order_items {
-        let res = enzyme_ad(llmod, llcx, &diag_handler, item, logic_ref, ad);
+        let res = unsafe{ enzyme_ad(llmod, llcx, &diag_handler.handle(), item, logic_ref, ad)};
         assert!(res.is_ok());
     }
 
-    let mut f = LLVMGetFirstFunction(llmod);
-    loop {
-        if let Some(lf) = f {
-            f = LLVMGetNextFunction(lf);
-            let myhwattr = "enzyme_hw";
-            let attr = LLVMGetStringAttributeAtIndex(
-                lf,
-                c_uint::MAX,
-                myhwattr.as_ptr() as *const c_char,
-                myhwattr.as_bytes().len() as c_uint,
-            );
-            if LLVMIsStringAttribute(attr) {
-                LLVMRemoveStringAttributeAtIndex(
+    unsafe {
+        let mut f = LLVMGetFirstFunction(llmod);
+        loop {
+            if let Some(lf) = f {
+                f = LLVMGetNextFunction(lf);
+                let myhwattr = "enzyme_hw";
+                let attr = LLVMGetStringAttributeAtIndex(
                     lf,
                     c_uint::MAX,
                     myhwattr.as_ptr() as *const c_char,
                     myhwattr.as_bytes().len() as c_uint,
                 );
+                if LLVMIsStringAttribute(attr) {
+                    LLVMRemoveStringAttributeAtIndex(
+                        lf,
+                        c_uint::MAX,
+                        myhwattr.as_ptr() as *const c_char,
+                        myhwattr.as_bytes().len() as c_uint,
+                    );
+                } else {
+                    LLVMRustRemoveEnumAttributeAtIndex(
+                        lf,
+                        c_uint::MAX,
+                        AttributeKind::SanitizeHWAddress,
+                    );
+                }
             } else {
-                LLVMRustRemoveEnumAttributeAtIndex(
-                    lf,
-                    c_uint::MAX,
-                    AttributeKind::SanitizeHWAddress,
-                );
+                break;
             }
-        } else {
-            break;
         }
-    }
-    if ad.contains(&AutoDiff::PrintModAfterEnzyme) {
-        unsafe {
+        if ad.contains(&AutoDiff::PrintModAfterEnzyme) {
             LLVMDumpModule(llmod);
         }
     }
@@ -1260,7 +1268,7 @@ pub(crate) unsafe fn differentiate(
                 first_run = true;
             }
             let noop = false;
-            llvm_optimize(cgcx, &diag_handler, module, config, opt_level, opt_stage, first_run, noop)?;
+            unsafe {llvm_optimize(cgcx, diag_handler.handle(), module, config, opt_level, opt_stage, first_run, noop)?};
         }
         if ad.contains(&AutoDiff::AltPipeline) {
             dbg!("Running Second postAD optimization");
@@ -1278,7 +1286,7 @@ pub(crate) unsafe fn differentiate(
                     first_run = false;
                 }
                 let noop = false;
-                llvm_optimize(cgcx, &diag_handler, module, config, opt_level, opt_stage, first_run, noop)?;
+                unsafe {llvm_optimize(cgcx, diag_handler.handle(), module, config, opt_level, opt_stage, first_run, noop)?};
             }
         }
     }
@@ -1320,7 +1328,7 @@ pub(crate) unsafe fn optimize(
     // different code sections. We remove this attribute after Enzyme is done, to not affect the
     // rest of the compilation.
     // TODO: only enable this code when at least one function gets differentiated.
-    {
+    unsafe {
         let mut f = LLVMGetFirstFunction(llmod);
         loop {
             if let Some(lf) = f {
