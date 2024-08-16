@@ -845,15 +845,12 @@ pub enum LLVMVerifierFailureAction {
     LLVMReturnStatusAction,
 }
 
-#[allow(dead_code)]
 pub(crate) unsafe fn enzyme_rust_forward_diff(
     logic_ref: EnzymeLogicRef,
     type_analysis: EnzymeTypeAnalysisRef,
     fnc: &Value,
     input_diffactivity: Vec<DiffActivity>,
     ret_diffactivity: DiffActivity,
-    _input_tts: Vec<TypeTree>,
-    _output_tt: TypeTree,
     void_ret: bool,
 ) -> (&Value, Vec<usize>) {
     let ret_activity = cdiffe_from(ret_diffactivity);
@@ -882,9 +879,6 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
     };
     trace!("ret_primary_ret: {}", &ret_primary_ret);
 
-    //let mut args_tree = input_tts.iter().map(|x| x.inner).collect::<Vec<_>>();
-    //let mut args_tree = vec![TypeTree::new().inner; typetree.input_tt.len()];
-
     // We don't support volatile / extern / (global?) values.
     // Just because I didn't had time to test them, and it seems less urgent.
     let args_uncacheable = vec![0; input_activity.len()];
@@ -900,9 +894,6 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
     let tree_tmp = TypeTree::new();
     let mut args_tree = vec![tree_tmp.inner; input_activity.len()];
 
-    //let mut args_tree = vec![std::ptr::null_mut(); input_activity.len()];
-    //let ret_tt = std::ptr::null_mut();
-    //let mut args_tree = vec![TypeTree::new().inner; input_tts.len()];
     let ret_tt = TypeTree::new();
     let dummy_type = CFnTypeInfo {
         Arguments: args_tree.as_mut_ptr(),
@@ -944,8 +935,6 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
     fnc: &Value,
     rust_input_activity: Vec<DiffActivity>,
     ret_activity: DiffActivity,
-    input_tts: Vec<TypeTree>,
-    _output_tt: TypeTree,
 ) -> (&Value, Vec<usize>) {
     let (primary_ret, ret_activity) = match ret_activity {
         DiffActivity::Const => (true, CDIFFE_TYPE::DFT_CONSTANT),
@@ -971,8 +960,6 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
         input_activity.push(cdiffe_from(x));
     }
 
-    //let args_tree = input_tts.iter().map(|x| x.inner).collect::<Vec<_>>();
-
     // We don't support volatile / extern / (global?) values.
     // Just because I didn't had time to test them, and it seems less urgent.
     let args_uncacheable = vec![0; input_activity.len()];
@@ -982,14 +969,11 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
     assert!(num_fnc_args == input_activity.len() as u32);
     let kv_tmp = IntList { data: std::ptr::null_mut(), size: 0 };
 
-    let mut known_values = vec![kv_tmp; input_tts.len()];
+    let mut known_values = vec![kv_tmp; input_activity.len()];
 
     let tree_tmp = TypeTree::new();
-    let mut args_tree = vec![tree_tmp.inner; input_tts.len()];
-    //let mut args_tree = vec![TypeTree::new().inner; input_tts.len()];
+    let mut args_tree = vec![tree_tmp.inner; input_activity.len()];
     let ret_tt = TypeTree::new();
-    //let mut args_tree = vec![std::ptr::null_mut(); input_tts.len()];
-    //let ret_tt = std::ptr::null_mut();
     let dummy_type = CFnTypeInfo {
         Arguments: args_tree.as_mut_ptr(),
         Return: ret_tt.inner,
@@ -1029,9 +1013,6 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
 }
 
 extern "C" {
-    // TODO: can I just ignore the non void return
-    // EraseFromParent doesn't exist :(
-    //pub fn LLVMEraseFromParent(BB: &BasicBlock) -> &Value;
     // Enzyme
     pub fn LLVMRustAddFncParamAttr<'a>(
         F: &'a Value,
