@@ -2428,17 +2428,8 @@ impl Step for Enzyme {
     }
 
     fn run(self, builder: &Builder<'_>) -> Option<GeneratedTarball> {
-        //let build_manifest = builder.tool_exe(Tool::Enzyme);
-
-        //let tarball = Tarball::new(builder, "enzyme", &self.target.triple);
-        //tarball.add_file(build_manifest, "bin", 0o755);
-
-        //tarball.generate()
         let compiler = self.compiler;
         let target = self.target;
-        dbg!(&compiler);
-        dbg!("building enzyme in build_steps/dist.rs");
-
         let enzyme = builder.ensure(tool::Enzyme { compiler, target });
         let mut tarball = Tarball::new(builder, "enzyme", &target.triple);
         tarball.set_overlay(OverlayKind::Enzyme);
