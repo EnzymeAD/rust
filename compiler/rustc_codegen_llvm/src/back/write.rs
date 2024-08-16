@@ -1,6 +1,4 @@
-#![allow(unused_imports)]
-#![allow(unused_variables)]
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -8,7 +6,7 @@ use std::{fs, slice, str};
 
 use libc::{c_char, c_int, c_uint, c_void, size_t};
 use llvm::{
-    IntPredicate, LLVMGetNextBasicBlock, LLVMRustDISetInstMetadata,
+    IntPredicate,
     LLVMRustLLVMHasZlibCompressionForDebugSymbols, LLVMRustLLVMHasZstdCompressionForDebugSymbols,
 };
 use rustc_ast::expand::autodiff_attrs::{AutoDiffItem, DiffActivity, DiffMode};
@@ -47,27 +45,26 @@ use crate::errors::{
 };
 use crate::llvm::diagnostic::OptimizationDiagnosticKind;
 use crate::llvm::{
-    self, enzyme_rust_forward_diff, enzyme_rust_reverse_diff, AttributeKind, BasicBlock,
+    self, enzyme_rust_forward_diff, enzyme_rust_reverse_diff, AttributeKind,
     CreateEnzymeLogic, CreateTypeAnalysis, DiagnosticInfo, EnzymeLogicRef, EnzymeTypeAnalysisRef,
-    FreeTypeAnalysis, LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBuildCall2,
+    FreeTypeAnalysis, LLVMAppendBasicBlockInContext, LLVMBuildCall2,
     LLVMBuildCondBr, LLVMBuildExtractValue, LLVMBuildICmp, LLVMBuildRet, LLVMBuildRetVoid,
     LLVMCountParams, LLVMCountStructElementTypes, LLVMCreateBuilderInContext,
-    LLVMCreateStringAttribute, LLVMDeleteFunction, LLVMDisposeBuilder, LLVMDumpModule,
-    LLVMGetBasicBlockTerminator, LLVMGetFirstBasicBlock, LLVMGetFirstFunction,
-    LLVMGetModuleContext, LLVMGetNextFunction, LLVMGetParams, LLVMGetReturnType,
+    LLVMCreateStringAttribute, LLVMDisposeBuilder, LLVMDumpModule,
+    LLVMGetFirstBasicBlock, LLVMGetFirstFunction,
+    LLVMGetNextFunction, LLVMGetParams, LLVMGetReturnType,
     LLVMGetStringAttributeAtIndex, LLVMGlobalGetValueType, LLVMIsEnumAttribute,
     LLVMIsStringAttribute, LLVMMetadataAsValue, LLVMPositionBuilderAtEnd,
-    LLVMRemoveStringAttributeAtIndex, LLVMReplaceAllUsesWith, LLVMRustAddEnumAttributeAtIndex,
-    LLVMRustAddFunctionAttributes, LLVMRustDIGetInstMetadata, LLVMRustDIGetInstMetadataOfTy,
-    LLVMRustEraseBBFromParent, LLVMRustEraseInstBefore, LLVMRustEraseInstFromParent,
+    LLVMRemoveStringAttributeAtIndex, LLVMRustAddEnumAttributeAtIndex,
+    LLVMRustAddFunctionAttributes, LLVMRustDIGetInstMetadata,
+    LLVMRustEraseInstBefore, LLVMRustEraseInstFromParent,
     LLVMRustGetEnumAttributeAtIndex, LLVMRustGetFunctionType, LLVMRustGetLastInstruction,
-    LLVMRustGetTerminator, LLVMRustHasDbgMetadata, LLVMRustHasMetadata,
-    LLVMRustRemoveEnumAttributeAtIndex, LLVMRustRemoveFncAttr,
-    LLVMRustgetFirstNonPHIOrDbgOrLifetime, LLVMSetValueName2, LLVMVerifyFunction,
+    LLVMRustGetTerminator, LLVMRustHasMetadata,
+    LLVMRustRemoveEnumAttributeAtIndex,
+    LLVMVerifyFunction,
     LLVMVoidTypeInContext, PassManager, Value,
 };
 use crate::type_::Type;
-use crate::typetree::to_enzyme_typetree;
 use crate::{base, common, llvm_util, DiffTypeTree, LlvmCodegenBackend, ModuleLlvm};
 
 pub fn llvm_err<'a>(dcx: DiagCtxtHandle<'_>, err: LlvmError<'a>) -> FatalError {
@@ -669,50 +666,27 @@ fn get_params(fnc: &Value) -> Vec<&Value> {
 
 // DESIGN:
 // Today we have our placeholder function, and our Enzyme generated one.
-// We create a wrapper function and delete the placeholder body.
-// We then call the wrapper from the placeholder.
+// We create a wrapper function and delete the placeholder body. You can see the
+// placeholder by running `cargo expand` on an autodiff invocation. We call the wrapper
+// from the placeholder. This function is a bit longer, because it matches the Rust level
+// autodiff macro with LLVM level Enzyme autodiff expectations.
 //
-// Soon, we won't delete the whole placeholder, but just the loop,
-// and the two inline asm sections. For now we can still call the wrapper.
-// In the future we call our Enzyme generated function directly and unwrap the return
-// struct in our original placeholder.
-//
-// define internal double @_ZN2ad3bar17ha38374e821680177E(ptr align 8 %0, ptr align 8 %1, double %2) unnamed_addr #17 !dbg !13678 {
-//  %4 = alloca double, align 8
-//  %5 = alloca ptr, align 8
-//  %6 = alloca ptr, align 8
-//  %7 = alloca { ptr, double }, align 8
-//  store ptr %0, ptr %6, align 8
-//  call void @llvm.dbg.declare(metadata ptr %6, metadata !13682, metadata !DIExpression()), !dbg !13685
-//  store ptr %1, ptr %5, align 8
-//  call void @llvm.dbg.declare(metadata ptr %5, metadata !13683, metadata !DIExpression()), !dbg !13685
-//  store double %2, ptr %4, align 8
-//  call void @llvm.dbg.declare(metadata ptr %4, metadata !13684, metadata !DIExpression()), !dbg !13686
-//  call void asm sideeffect alignstack inteldialect "NOP", "~{dirflag},~{fpsr},~{flags},~{memory}"(), !dbg !13687, !srcloc !23
-//  %8 = call double @_ZN2ad3foo17h95b548a9411653b2E(ptr align 8 %0), !dbg !13687
-//  %9 = call double @_ZN4core4hint9black_box17h7bd67a41b0f12bdfE(double %8), !dbg !13687
-//  store ptr %1, ptr %7, align 8, !dbg !13687
-//  %10 = getelementptr inbounds { ptr, double }, ptr %7, i32 0, i32 1, !dbg !13687
-//  store double %2, ptr %10, align 8, !dbg !13687
-//  %11 = getelementptr inbounds { ptr, double }, ptr %7, i32 0, i32 0, !dbg !13687
-//  %12 = load ptr, ptr %11, align 8, !dbg !13687, !nonnull !23, !align !1047, !noundef !23
-//  %13 = getelementptr inbounds { ptr, double }, ptr %7, i32 0, i32 1, !dbg !13687
-//  %14 = load double, ptr %13, align 8, !dbg !13687, !noundef !23
-//  %15 = call { ptr, double } @_ZN4core4hint9black_box17h669f3b22afdcb487E(ptr align 8 %12, double %14), !dbg !13687
-//  %16 = extractvalue { ptr, double } %15, 0, !dbg !13687
-//  %17 = extractvalue { ptr, double } %15, 1, !dbg !13687
-//  br label %18, !dbg !13687
-//
-//18:                                               ; preds = %18, %3
-//  br label %18, !dbg !13687
+// Think of computing the derivative with respect to &[f32] by marking it as duplicated.
+// The user will then pass an extra &mut [f32] and we want add the derivative to that.
+// On LLVM/Enzyme level, &[f32] however becomes `ptr, i64` and we mark ptr as duplicated,
+// and i64 (len) as const. Enzyme will then expect `ptr, ptr, i64` as arguments. See how the
+// second i64 from the mut slice isn't used? That's why we add a safety check to assert
+// that the second (mut) slice is at least as long as the first (const) slice. Otherwise,
+// Enzyme would write out of bounds if the first (const) slice is longer than the second.
 
 unsafe fn create_call<'a>(
     tgt: &'a Value,
     src: &'a Value,
-    rev_mode: bool,
     llmod: &'a llvm::Module,
     llcx: &llvm::Context,
-    size_positions: &[usize],
+    // FIXME: Instead of recomputing the positions as we do it below, we should
+    // start using this list of positions that indicate length integers.
+    _size_positions: &[usize],
     ad: &[AutoDiff],
 ) {
     unsafe {
@@ -756,9 +730,10 @@ unsafe fn create_call<'a>(
                     inner_pos += 1;
                     outer_pos += 1;
                 } else {
-                    // out: (ptr, <>int1, ptr, int2)
+                    // out: rust: (&[f32], &mut [f32])
+                    // out: llvm: (ptr, <>int1, ptr, int2)
                     // inner: (ptr, <>ptr, int)
-                    // goal: (ptr, ptr, int1), skipping int2
+                    // goal: call (ptr, ptr, int1), skipping int2
                     // we are here: <>
                     assert!(llvm::LLVMRustGetTypeKind(outer_arg_ty) == llvm::TypeKind::Integer);
                     assert!(llvm::LLVMRustGetTypeKind(inner_arg_ty) == llvm::TypeKind::Pointer);
@@ -872,17 +847,17 @@ unsafe fn create_call<'a>(
         );
 
         // Add dummy dbg info to our newly generated call, if we have any.
-        let inst = LLVMRustgetFirstNonPHIOrDbgOrLifetime(bb).unwrap();
         let md_ty = llvm::LLVMGetMDKindIDInContext(
             llcx,
             "dbg".as_ptr() as *const c_char,
             "dbg".len() as c_uint,
         );
 
+
         if LLVMRustHasMetadata(last_inst, md_ty) {
             let md = LLVMRustDIGetInstMetadata(last_inst);
             let md_val = LLVMMetadataAsValue(llcx, md);
-            let md2 = llvm::LLVMSetMetadata(struct_ret, md_ty, md_val);
+            let _md2 = llvm::LLVMSetMetadata(struct_ret, md_ty, md_val);
         } else {
             trace!("No dbg info");
         }
@@ -938,8 +913,8 @@ unsafe fn get_panic_name(llmod: &llvm::Module) -> CString {
 // For now we only check if shadow arguments are large enough. In this case we look for Rust panic
 // functions in the module and call it. Due to hashing we can't hardcode the panic function name.
 // Note: This worked even for panic=abort tests so seems solid enough for now.
-// TODO: Pick a panic function which allows displaying an errormessage.
-// TODO: We probably want to keep a handle at higher level and pass it down instead of searching.
+// FIXME: Pick a panic function which allows displaying an error message.
+// FIXME: We probably want to keep a handle at higher level and pass it down instead of searching.
 unsafe fn add_panic_msg_to_global<'a>(
     llmod: &'a llvm::Module,
     llcx: &'a llvm::Context,
@@ -961,7 +936,7 @@ unsafe fn add_panic_msg_to_global<'a>(
         let i8_array_type = LLVMArrayType2(LLVMInt8TypeInContext(llcx), msg_len as u64);
 
         // Create the string constant
-        let string_const_val =
+        let _string_const_val =
             LLVMConstStringInContext2(llcx, cmsg.as_ptr() as *const i8, msg_len as usize, 0);
 
         // Create the array initializer
@@ -1098,8 +1073,7 @@ pub(crate) unsafe fn enzyme_ad(
 
         let f_return_type = LLVMGetReturnType(LLVMGlobalGetValueType(res));
 
-        let rev_mode = item.attrs.mode == DiffMode::Reverse;
-        create_call(target_fnc, res, rev_mode, llmod, llcx, &size_positions, ad);
+        create_call(target_fnc, res, llmod, llcx, &size_positions, ad);
         // TODO: implement drop for wrapper type?
         FreeTypeAnalysis(type_analysis);
     }
@@ -1133,10 +1107,6 @@ pub(crate) unsafe fn differentiate(
 
     // Before dumping the module, we want all the tt to become part of the module.
     for (i, item) in diff_items.iter().enumerate() {
-        let llvm_data_layout = unsafe { llvm::LLVMGetDataLayoutStr(&*llmod) };
-        let llvm_data_layout =
-            std::str::from_utf8(unsafe { CStr::from_ptr(llvm_data_layout) }.to_bytes())
-                .expect("got a non-UTF8 data-layout from LLVM");
         let tt: FncTree = FncTree { args: item.inputs.clone(), ret: item.output.clone() };
         let name = CString::new(item.source.clone()).unwrap();
         let fn_def: &llvm::Value =

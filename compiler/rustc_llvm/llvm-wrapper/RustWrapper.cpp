@@ -365,10 +365,6 @@ extern "C" void LLVMRustEraseInstFromParent(LLVMValueRef Instr) {
   }
 }
 
-extern "C" void LLVMRustEraseBBFromParent(LLVMBasicBlockRef BB) {
-  unwrap(BB)->eraseFromParent();
-}
-
 extern "C" LLVMTypeRef LLVMRustGetFunctionType(LLVMValueRef Fn) {
   auto Ftype = unwrap<Function>(Fn)->getFunctionType();
   return wrap(Ftype);
@@ -907,13 +903,6 @@ extern "C" bool LLVMRustHasModuleFlag(LLVMModuleRef M, const char *Name,
   return unwrap(M)->getModuleFlag(StringRef(Name, Len)) != nullptr;
 }
 
-extern "C" LLVMValueRef
-LLVMRustgetFirstNonPHIOrDbgOrLifetime(LLVMBasicBlockRef BB) {
-  if (auto *I = unwrap(BB)->getFirstNonPHIOrDbgOrLifetime())
-    return wrap(I);
-  return nullptr;
-}
-
 // pub fn LLVMRustGetLastInstruction<'a>(BB: &BasicBlock) -> Option<&'a Value>;
 extern "C" LLVMValueRef LLVMRustGetLastInstruction(LLVMBasicBlockRef BB) {
   auto Point = unwrap(BB)->rbegin();
@@ -945,21 +934,6 @@ extern "C" bool LLVMRustHasMetadata(LLVMValueRef inst, unsigned kindID) {
   return false;
 }
 
-extern "C" bool LLVMRustHasDbgMetadata(LLVMValueRef inst) {
-  if (auto *I = dyn_cast<Instruction>(unwrap<Value>(inst))) {
-    return false;
-    // return I->hasDbgValues();
-  }
-  return false;
-}
-
-extern "C" void LLVMRustRemoveFncAttr(LLVMValueRef F,
-                                      LLVMRustAttribute RustAttr) {
-  if (auto *Fn = dyn_cast<Function>(unwrap<Value>(F))) {
-    Fn->removeFnAttr(fromRust(RustAttr));
-  }
-}
-
 extern "C" void LLVMRustAddFncParamAttr(LLVMValueRef F, unsigned i,
                                       LLVMAttributeRef RustAttr) {
   if (auto *Fn = dyn_cast<Function>(unwrap<Value>(F))) {
@@ -983,26 +957,10 @@ extern "C" LLVMMetadataRef LLVMRustDIGetInstMetadata(LLVMValueRef x) {
   return nullptr;
 }
 
-extern "C" LLVMMetadataRef LLVMRustDIGetInstMetadataOfTy(LLVMValueRef x,
-                                                         unsigned kindID) {
-  if (auto *I = dyn_cast<Instruction>(unwrap<Value>(x))) {
-    auto *MD = I->getMetadata(kindID);
-    return wrap(MD);
-  }
-  return nullptr;
-}
-
 extern "C" void LLVMRustAddParamAttr(LLVMValueRef call, unsigned i,
                                      LLVMAttributeRef RustAttr) {
   if (auto *CI = dyn_cast<CallInst>(unwrap<Value>(call))) {
     CI->addParamAttr(i, unwrap(RustAttr));
-  }
-}
-
-extern "C" void LLVMRustDISetInstMetadata(LLVMValueRef Inst,
-                                          LLVMMetadataRef Desc) {
-  if (auto *I = dyn_cast<Instruction>(unwrap<Value>(Inst))) {
-    I->setMetadata(LLVMContext::MD_dbg, unwrap<MDNode>(Desc));
   }
 }
 
