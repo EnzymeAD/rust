@@ -2439,8 +2439,7 @@ impl Step for Enzyme {
         dbg!(&compiler);
         dbg!("building enzyme in build_steps/dist.rs");
 
-        let enzyme =
-            builder.ensure(tool::Enzyme { compiler, target });
+        let enzyme = builder.ensure(tool::Enzyme { compiler, target });
         let mut tarball = Tarball::new(builder, "enzyme", &target.triple);
         tarball.set_overlay(OverlayKind::Enzyme);
         tarball.is_preview(true);

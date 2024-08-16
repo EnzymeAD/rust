@@ -969,11 +969,7 @@ mod parse {
         }
     }
 
-    pub(crate) fn parse_autodiff(
-        slot: &mut Vec<AutoDiff>,
-        v: Option<&str>,
-    ) -> bool {
-
+    pub(crate) fn parse_autodiff(slot: &mut Vec<AutoDiff>, v: Option<&str>) -> bool {
         let Some(v) = v else {
             *slot = vec![];
             return true;

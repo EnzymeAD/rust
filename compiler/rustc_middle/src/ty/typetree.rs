@@ -1,12 +1,13 @@
-use crate::ty::{self, Ty, FieldsShape};
-use rustc_ast::expand::typetree::{Type, TypeTree, FncTree, Kind};
-//, Type, Kind, TypeTree, FncTree, FieldsShape};
-use super::context::TyCtxt;
+use rustc_ast::expand::typetree::{FncTree, Kind, Type, TypeTree};
 use rustc_span::Span;
-use super::{ParamEnv, ParamEnvAnd};
-use crate::error::AutodiffUnsafeInnerConstRef;
 use rustc_type_ir::Adt;
 use tracing::trace;
+
+//, Type, Kind, TypeTree, FncTree, FieldsShape};
+use super::context::TyCtxt;
+use super::{ParamEnv, ParamEnvAnd};
+use crate::error::AutodiffUnsafeInnerConstRef;
+use crate::ty::{self, FieldsShape, Ty};
 
 pub fn typetree_from<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> TypeTree {
     let mut visited = vec![];
@@ -28,7 +29,12 @@ use rustc_ast::expand::autodiff_attrs::DiffActivity;
 //    Not an error, becaues it only causes issues if they are actually read, which we don't check
 //    yet. We should add such analysis to relibably either issue an error or accept without warning.
 //    If there only were some reasearch to do that...
-pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<DiffActivity>, span: Option<Span>) -> FncTree {
+pub fn fnc_typetrees<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    fn_ty: Ty<'tcx>,
+    da: &mut Vec<DiffActivity>,
+    span: Option<Span>,
+) -> FncTree {
     if !fn_ty.is_fn() {
         return FncTree { args: vec![], ret: TypeTree::new() };
     }
@@ -71,7 +77,8 @@ pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<Diff
                 let child = typetree_from_ty(inner_ty, tcx, 1, safety, &mut visited, span);
                 let tt = Type { offset: -1, kind: Kind::Pointer, size: 8, child };
                 args.push(TypeTree(vec![tt]));
-                let i64_tt = Type { offset: -1, kind: Kind::Integer, size: 8, child: TypeTree::new() };
+                let i64_tt =
+                    Type { offset: -1, kind: Kind::Integer, size: 8, child: TypeTree::new() };
                 args.push(TypeTree(vec![i64_tt]));
                 if !da.is_empty() {
                     // We are looking at a slice. The length of that slice will become an
@@ -79,9 +86,10 @@ pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<Diff
                     // However, if the slice get's duplicated, we want to know to later check the
                     // size. So we mark the new size argument as FakeActivitySize.
                     let activity = match da[i] {
-                        DiffActivity::DualOnly | DiffActivity::Dual |
-                            DiffActivity::DuplicatedOnly | DiffActivity::Duplicated
-                            => DiffActivity::FakeActivitySize,
+                        DiffActivity::DualOnly
+                        | DiffActivity::Dual
+                        | DiffActivity::DuplicatedOnly
+                        | DiffActivity::Duplicated => DiffActivity::FakeActivitySize,
                         DiffActivity::Const => DiffActivity::Const,
                         _ => panic!("unexpected activity for ptr/ref"),
                     };
@@ -110,7 +118,14 @@ pub fn fnc_typetrees<'tcx>(tcx: TyCtxt<'tcx>, fn_ty: Ty<'tcx>, da: &mut Vec<Diff
     FncTree { args, ret }
 }
 
-fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize, safety: bool, visited: &mut Vec<Ty<'a>>, span: Option<Span>) -> TypeTree {
+fn typetree_from_ty<'a>(
+    ty: Ty<'a>,
+    tcx: TyCtxt<'a>,
+    depth: usize,
+    safety: bool,
+    visited: &mut Vec<Ty<'a>>,
+    span: Option<Span>,
+) -> TypeTree {
     if depth > 20 {
         trace!("depth > 20 for ty: {}", &ty);
     }
@@ -138,15 +153,14 @@ fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize, safety: bool,
             } else {
                 assert!(ty.is_box());
                 "box"
-            }.to_string();
+            }
+            .to_string();
 
             // If we have mutability, we also have a span
             assert!(span.is_some());
             let span = span.unwrap();
 
-            tcx.sess
-            .dcx()
-            .emit_warn(AutodiffUnsafeInnerConstRef{span, ty: ptr_ty});
+            tcx.sess.dcx().emit_warn(AutodiffUnsafeInnerConstRef { span, ty: ptr_ty });
         }
 
         //visited.push(inner_ty);
@@ -155,7 +169,6 @@ fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize, safety: bool,
         visited.pop();
         return TypeTree(vec![tt]);
     }
-
 
     if ty.is_closure() || ty.is_coroutine() || ty.is_fresh() || ty.is_fn() {
         visited.pop();
@@ -187,8 +200,6 @@ fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize, safety: bool,
     let fields = layout.fields();
     let max_size = layout.size();
 
-
-
     if ty.is_adt() && !ty.is_simd() {
         let adt_def = ty.ty_adt_def().unwrap();
 
@@ -196,9 +207,15 @@ fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize, safety: bool,
             let (offsets, _memory_index) = match fields {
                 // Manuel TODO:
                 FieldsShape::Arbitrary { offsets: o, memory_index: m } => (o, m),
-                FieldsShape::Array { .. } => {return TypeTree::new();}, //e.g. core::arch::x86_64::__m128i, TODO: later
-                FieldsShape::Union(_) => {return TypeTree::new();},
-                FieldsShape::Primitive => {return TypeTree::new();},
+                FieldsShape::Array { .. } => {
+                    return TypeTree::new();
+                } //e.g. core::arch::x86_64::__m128i, TODO: later
+                FieldsShape::Union(_) => {
+                    return TypeTree::new();
+                }
+                FieldsShape::Primitive => {
+                    return TypeTree::new();
+                }
             };
 
             let substs = match ty.kind() {
@@ -220,7 +237,8 @@ fn typetree_from_ty<'a>(ty: Ty<'a>, tcx: TyCtxt<'a>, depth: usize, safety: bool,
                     }
 
                     //visited.push(field_ty);
-                    let mut child = typetree_from_ty(field_ty, tcx, depth + 1, safety, visited, span).0;
+                    let mut child =
+                        typetree_from_ty(field_ty, tcx, depth + 1, safety, visited, span).0;
 
                     for c in &mut child {
                         if c.offset == -1 {

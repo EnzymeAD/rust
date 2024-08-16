@@ -192,7 +192,6 @@ impl Default for CoverageLevel {
     }
 }
 
-
 /// The different settings that the `-Z ad` flag can have.
 #[derive(Clone, Copy, PartialEq, Hash, Debug)]
 pub enum AutoDiff {
@@ -3040,13 +3039,13 @@ pub(crate) mod dep_tracking {
     };
 
     use super::{
-        BranchProtection, CFGuard, CFProtection, CollapseMacroDebuginfo, CoverageOptions,
+        AutoDiff, BranchProtection, CFGuard, CFProtection, CollapseMacroDebuginfo, CoverageOptions,
         CrateType, DebugInfo, DebugInfoCompression, ErrorOutputType, FunctionReturn,
         InliningThreshold, InstrumentCoverage, InstrumentXRay, LinkerPluginLto, LocationDetail,
         LtoCli, NextSolverConfig, OomStrategy, OptLevel, OutFileName, OutputType, OutputTypes,
         PatchableFunctionEntry, Polonius, RemapPathScopeComponents, ResolveDocLinks,
         SourceFileHashAlgorithm, SplitDwarfKind, SwitchWithOptPath, SymbolManglingVersion,
-        WasiExecModel, AutoDiff,
+        WasiExecModel,
     };
     use crate::lint;
     use crate::utils::NativeLib;

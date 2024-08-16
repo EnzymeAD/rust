@@ -6,8 +6,6 @@
 
 #![allow(unused_parens)]
 
-use rustc_ast::expand::autodiff_attrs::{AutoDiffAttrs, AutoDiffItem};
-
 use std::mem;
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -15,6 +13,7 @@ use std::sync::Arc;
 
 use rustc_arena::TypedArena;
 use rustc_ast::expand::allocator::AllocatorKind;
+use rustc_ast::expand::autodiff_attrs::{AutoDiffAttrs, AutoDiffItem};
 use rustc_ast::expand::StrippedCfgItem;
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::{FxIndexMap, FxIndexSet};

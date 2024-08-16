@@ -529,7 +529,6 @@ impl Step for Llvm {
             }
         };
 
-
         // Manuel: TODO: Do we need that for Enzyme too?
         // When building LLVM with LLVM_LINK_LLVM_DYLIB for macOS, an unversioned
         // libLLVM.dylib will be built. However, llvm-config will still look

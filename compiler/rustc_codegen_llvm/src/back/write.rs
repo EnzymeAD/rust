@@ -1,45 +1,5 @@
 #![allow(unused_imports)]
 #![allow(unused_variables)]
-use crate::llvm::LLVMGetFirstBasicBlock;
-use crate::llvm::LLVMBuildCondBr;
-use crate::llvm::LLVMBuildICmp;
-use crate::llvm::LLVMBuildRetVoid;
-use crate::llvm::LLVMRustEraseInstBefore;
-use crate::llvm::LLVMRustHasDbgMetadata;
-use crate::llvm::LLVMRustHasMetadata;
-use crate::llvm::LLVMRustRemoveFncAttr;
-use crate::llvm::LLVMMetadataAsValue;
-use crate::llvm::LLVMRustGetLastInstruction;
-use crate::llvm::LLVMRustDIGetInstMetadata;
-use crate::llvm::LLVMRustDIGetInstMetadataOfTy;
-use crate::llvm::LLVMRustgetFirstNonPHIOrDbgOrLifetime;
-use crate::llvm::LLVMRustGetTerminator;
-use crate::llvm::LLVMRustEraseInstFromParent;
-use crate::llvm::LLVMRustEraseBBFromParent;
-
-use crate::llvm::{
-    enzyme_rust_forward_diff, enzyme_rust_reverse_diff, AttributeKind, BasicBlock, FreeTypeAnalysis,
-    CreateEnzymeLogic, CreateTypeAnalysis, EnzymeLogicRef, EnzymeTypeAnalysisRef, LLVMAddFunction,
-    LLVMAppendBasicBlockInContext, LLVMBuildCall2, LLVMBuildExtractValue, LLVMBuildRet,
-    LLVMCountParams, LLVMCountStructElementTypes, LLVMCreateBuilderInContext,
-    LLVMCreateStringAttribute, LLVMDeleteFunction, LLVMDisposeBuilder, LLVMDumpModule,
-    LLVMGetBasicBlockTerminator, LLVMGetFirstFunction, LLVMGetModuleContext,
-    LLVMGetNextFunction, LLVMGetParams, LLVMGetReturnType, LLVMRustGetFunctionType, LLVMGetStringAttributeAtIndex,
-    LLVMGlobalGetValueType, LLVMIsEnumAttribute, LLVMIsStringAttribute, LLVMPositionBuilderAtEnd,
-    LLVMRemoveStringAttributeAtIndex, LLVMReplaceAllUsesWith, LLVMRustAddEnumAttributeAtIndex,
-    LLVMRustAddFunctionAttributes, LLVMRustGetEnumAttributeAtIndex,
-    LLVMRustRemoveEnumAttributeAtIndex, LLVMSetValueName2, LLVMVerifyFunction,
-    LLVMVoidTypeInContext, Value,
-};
-use crate::typetree::to_enzyme_typetree;
-use crate::DiffTypeTree;
-use llvm::IntPredicate;
-use llvm::LLVMRustDISetInstMetadata;
-use llvm::LLVMGetNextBasicBlock;
-use rustc_ast::expand::autodiff_attrs::{AutoDiffItem, DiffActivity, DiffMode};
-use rustc_ast::expand::typetree::FncTree;
-use rustc_data_structures::fx::FxHashMap;
-
 use std::ffi::{CStr, CString};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -48,8 +8,11 @@ use std::{fs, slice, str};
 
 use libc::{c_char, c_int, c_uint, c_void, size_t};
 use llvm::{
+    IntPredicate, LLVMGetNextBasicBlock, LLVMRustDISetInstMetadata,
     LLVMRustLLVMHasZlibCompressionForDebugSymbols, LLVMRustLLVMHasZstdCompressionForDebugSymbols,
 };
+use rustc_ast::expand::autodiff_attrs::{AutoDiffItem, DiffActivity, DiffMode};
+use rustc_ast::expand::typetree::FncTree;
 use rustc_codegen_ssa::back::link::ensure_removed;
 use rustc_codegen_ssa::back::write::{
     BitcodeSection, CodegenContext, EmitObj, ModuleConfig, TargetMachineFactoryConfig,
@@ -57,19 +20,21 @@ use rustc_codegen_ssa::back::write::{
 };
 use rustc_codegen_ssa::traits::*;
 use rustc_codegen_ssa::{CompiledModule, ModuleCodegen};
+use rustc_data_structures::fx::FxHashMap;
 use rustc_data_structures::profiling::SelfProfilerRef;
 use rustc_data_structures::small_c_str::SmallCStr;
 use rustc_errors::{DiagCtxtHandle, FatalError, Level};
 use rustc_fs_util::{link_or_copy, path_to_c_string};
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::{
-    self, AutoDiff, Lto, OutputType, Passes, RemapPathScopeComponents, SplitDwarfKind, SwitchWithOptPath,
+    self, AutoDiff, Lto, OutputType, Passes, RemapPathScopeComponents, SplitDwarfKind,
+    SwitchWithOptPath,
 };
 use rustc_session::Session;
 use rustc_span::symbol::sym;
 use rustc_span::InnerSpan;
 use rustc_target::spec::{CodeModel, RelocModel, SanitizerSet, SplitDebuginfo, TlsModel};
-use tracing::debug;
+use tracing::{debug, trace};
 
 use crate::back::lto::ThinBuffer;
 use crate::back::owned_target_machine::OwnedTargetMachine;
@@ -81,11 +46,29 @@ use crate::errors::{
     WithLlvmError, WriteBytecode,
 };
 use crate::llvm::diagnostic::OptimizationDiagnosticKind;
-use crate::llvm::{self, DiagnosticInfo, PassManager};
+use crate::llvm::{
+    self, enzyme_rust_forward_diff, enzyme_rust_reverse_diff, AttributeKind, BasicBlock,
+    CreateEnzymeLogic, CreateTypeAnalysis, DiagnosticInfo, EnzymeLogicRef, EnzymeTypeAnalysisRef,
+    FreeTypeAnalysis, LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBuildCall2,
+    LLVMBuildCondBr, LLVMBuildExtractValue, LLVMBuildICmp, LLVMBuildRet, LLVMBuildRetVoid,
+    LLVMCountParams, LLVMCountStructElementTypes, LLVMCreateBuilderInContext,
+    LLVMCreateStringAttribute, LLVMDeleteFunction, LLVMDisposeBuilder, LLVMDumpModule,
+    LLVMGetBasicBlockTerminator, LLVMGetFirstBasicBlock, LLVMGetFirstFunction,
+    LLVMGetModuleContext, LLVMGetNextFunction, LLVMGetParams, LLVMGetReturnType,
+    LLVMGetStringAttributeAtIndex, LLVMGlobalGetValueType, LLVMIsEnumAttribute,
+    LLVMIsStringAttribute, LLVMMetadataAsValue, LLVMPositionBuilderAtEnd,
+    LLVMRemoveStringAttributeAtIndex, LLVMReplaceAllUsesWith, LLVMRustAddEnumAttributeAtIndex,
+    LLVMRustAddFunctionAttributes, LLVMRustDIGetInstMetadata, LLVMRustDIGetInstMetadataOfTy,
+    LLVMRustEraseBBFromParent, LLVMRustEraseInstBefore, LLVMRustEraseInstFromParent,
+    LLVMRustGetEnumAttributeAtIndex, LLVMRustGetFunctionType, LLVMRustGetLastInstruction,
+    LLVMRustGetTerminator, LLVMRustHasDbgMetadata, LLVMRustHasMetadata,
+    LLVMRustRemoveEnumAttributeAtIndex, LLVMRustRemoveFncAttr,
+    LLVMRustgetFirstNonPHIOrDbgOrLifetime, LLVMSetValueName2, LLVMVerifyFunction,
+    LLVMVoidTypeInContext, PassManager, Value,
+};
 use crate::type_::Type;
-use crate::{base, common, llvm_util, LlvmCodegenBackend, ModuleLlvm};
-
-use tracing::trace;
+use crate::typetree::to_enzyme_typetree;
+use crate::{base, common, llvm_util, DiffTypeTree, LlvmCodegenBackend, ModuleLlvm};
 
 pub fn llvm_err<'a>(dcx: DiagCtxtHandle<'_>, err: LlvmError<'a>) -> FatalError {
     match llvm::last_error() {
@@ -579,11 +562,14 @@ pub(crate) unsafe fn llvm_optimize(
         vectorize_loop = false;
     } else {
         unroll_loops =
-        opt_level != config::OptLevel::Size && opt_level != config::OptLevel::SizeMin;
+            opt_level != config::OptLevel::Size && opt_level != config::OptLevel::SizeMin;
         vectorize_slp = config.vectorize_slp;
         vectorize_loop = config.vectorize_loop;
     }
-    trace!("Enzyme: Running with unroll_loops: {}, vectorize_slp: {}, vectorize_loop: {}", unroll_loops, vectorize_slp, vectorize_loop);
+    trace!(
+        "Enzyme: Running with unroll_loops: {}, vectorize_slp: {}, vectorize_loop: {}",
+        unroll_loops, vectorize_slp, vectorize_loop
+    );
     let using_thin_buffers = opt_stage == llvm::OptStage::PreLinkThinLTO || config.bitcode_needed();
     let pgo_gen_path = get_pgo_gen_path(config);
     let pgo_use_path = get_pgo_use_path(config);
@@ -670,7 +656,6 @@ pub(crate) unsafe fn llvm_optimize(
     result.into_result().map_err(|()| llvm_err(dcx, LlvmError::RunLlvmPasses))
 }
 
-
 fn get_params(fnc: &Value) -> Vec<&Value> {
     unsafe {
         let param_num = LLVMCountParams(fnc) as usize;
@@ -721,186 +706,220 @@ fn get_params(fnc: &Value) -> Vec<&Value> {
 //18:                                               ; preds = %18, %3
 //  br label %18, !dbg !13687
 
-
-unsafe fn create_call<'a>(tgt: &'a Value, src: &'a Value, rev_mode: bool,
-    llmod: &'a llvm::Module, llcx: &llvm::Context, size_positions: &[usize], ad: &[AutoDiff]) {
+unsafe fn create_call<'a>(
+    tgt: &'a Value,
+    src: &'a Value,
+    rev_mode: bool,
+    llmod: &'a llvm::Module,
+    llcx: &llvm::Context,
+    size_positions: &[usize],
+    ad: &[AutoDiff],
+) {
     unsafe {
+        // first, remove all calls from fnc
+        let bb = LLVMGetFirstBasicBlock(tgt);
+        let br = LLVMRustGetTerminator(bb);
+        LLVMRustEraseInstFromParent(br);
 
-   // first, remove all calls from fnc
-   let bb = LLVMGetFirstBasicBlock(tgt);
-   let br = LLVMRustGetTerminator(bb);
-   LLVMRustEraseInstFromParent(br);
+        // now add a call to inner.
+        // append call to src at end of bb.
+        let f_ty = LLVMRustGetFunctionType(src);
 
-   // now add a call to inner.
-    // append call to src at end of bb.
-    let f_ty = LLVMRustGetFunctionType(src);
+        let inner_param_num = LLVMCountParams(src);
+        let outer_param_num = LLVMCountParams(tgt);
+        let outer_args: Vec<&Value> = get_params(tgt);
+        let inner_args: Vec<&Value> = get_params(src);
+        let mut call_args: Vec<&Value> = vec![];
 
-    let inner_param_num = LLVMCountParams(src);
-    let outer_param_num = LLVMCountParams(tgt);
-    let outer_args: Vec<&Value> = get_params(tgt);
-    let inner_args: Vec<&Value> = get_params(src);
-    let mut call_args: Vec<&Value> = vec![];
+        let mut safety_vals = vec![];
+        let builder = LLVMCreateBuilderInContext(llcx);
+        let last_inst = LLVMRustGetLastInstruction(bb).unwrap();
+        LLVMPositionBuilderAtEnd(builder, bb);
 
-    let mut safety_vals = vec![];
-    let builder = LLVMCreateBuilderInContext(llcx);
-    let last_inst = LLVMRustGetLastInstruction(bb).unwrap();
-    LLVMPositionBuilderAtEnd(builder, bb);
+        let safety_run_checks = !ad.contains(&AutoDiff::NoSafetyChecks);
 
-    let safety_run_checks = !ad.contains(&AutoDiff::NoSafetyChecks);
+        if inner_param_num == outer_param_num {
+            call_args = outer_args;
+        } else {
+            trace!("Different number of args, adjusting");
+            let mut outer_pos: usize = 0;
+            let mut inner_pos: usize = 0;
+            // copy over if they are identical.
+            // If not, skip the outer arg (and assert it's int).
+            while outer_pos < outer_param_num as usize {
+                let inner_arg = inner_args[inner_pos];
+                let outer_arg = outer_args[outer_pos];
+                let inner_arg_ty = llvm::LLVMTypeOf(inner_arg);
+                let outer_arg_ty = llvm::LLVMTypeOf(outer_arg);
+                if inner_arg_ty == outer_arg_ty {
+                    call_args.push(outer_arg);
+                    inner_pos += 1;
+                    outer_pos += 1;
+                } else {
+                    // out: (ptr, <>int1, ptr, int2)
+                    // inner: (ptr, <>ptr, int)
+                    // goal: (ptr, ptr, int1), skipping int2
+                    // we are here: <>
+                    assert!(llvm::LLVMRustGetTypeKind(outer_arg_ty) == llvm::TypeKind::Integer);
+                    assert!(llvm::LLVMRustGetTypeKind(inner_arg_ty) == llvm::TypeKind::Pointer);
+                    let next_outer_arg = outer_args[outer_pos + 1];
+                    let next_inner_arg = inner_args[inner_pos + 1];
+                    let next_outer_arg_ty = llvm::LLVMTypeOf(next_outer_arg);
+                    let next_inner_arg_ty = llvm::LLVMTypeOf(next_inner_arg);
+                    assert!(
+                        llvm::LLVMRustGetTypeKind(next_outer_arg_ty) == llvm::TypeKind::Pointer
+                    );
+                    assert!(
+                        llvm::LLVMRustGetTypeKind(next_inner_arg_ty) == llvm::TypeKind::Integer
+                    );
+                    let next2_outer_arg = outer_args[outer_pos + 2];
+                    let next2_outer_arg_ty = llvm::LLVMTypeOf(next2_outer_arg);
+                    assert!(
+                        llvm::LLVMRustGetTypeKind(next2_outer_arg_ty) == llvm::TypeKind::Integer
+                    );
+                    call_args.push(next_outer_arg);
+                    call_args.push(outer_arg);
 
-    if inner_param_num == outer_param_num {
-        call_args = outer_args;
-    } else {
-        trace!("Different number of args, adjusting");
-        let mut outer_pos: usize = 0;
-        let mut inner_pos: usize = 0;
-        // copy over if they are identical.
-        // If not, skip the outer arg (and assert it's int).
-        while outer_pos < outer_param_num as usize {
-            let inner_arg = inner_args[inner_pos];
-            let outer_arg = outer_args[outer_pos];
-            let inner_arg_ty = llvm::LLVMTypeOf(inner_arg);
-            let outer_arg_ty = llvm::LLVMTypeOf(outer_arg);
-            if inner_arg_ty == outer_arg_ty {
-                call_args.push(outer_arg);
-                inner_pos += 1;
-                outer_pos += 1;
-            } else {
-                // out: (ptr, <>int1, ptr, int2)
-                // inner: (ptr, <>ptr, int)
-                // goal: (ptr, ptr, int1), skipping int2
-                // we are here: <>
-                assert!(llvm::LLVMRustGetTypeKind(outer_arg_ty) == llvm::TypeKind::Integer);
-                assert!(llvm::LLVMRustGetTypeKind(inner_arg_ty) == llvm::TypeKind::Pointer);
-                let next_outer_arg = outer_args[outer_pos + 1];
-                let next_inner_arg = inner_args[inner_pos + 1];
-                let next_outer_arg_ty = llvm::LLVMTypeOf(next_outer_arg);
-                let next_inner_arg_ty = llvm::LLVMTypeOf(next_inner_arg);
-                assert!(llvm::LLVMRustGetTypeKind(next_outer_arg_ty) == llvm::TypeKind::Pointer);
-                assert!(llvm::LLVMRustGetTypeKind(next_inner_arg_ty) == llvm::TypeKind::Integer);
-                let next2_outer_arg = outer_args[outer_pos + 2];
-                let next2_outer_arg_ty = llvm::LLVMTypeOf(next2_outer_arg);
-                assert!(llvm::LLVMRustGetTypeKind(next2_outer_arg_ty) == llvm::TypeKind::Integer);
-                call_args.push(next_outer_arg);
-                call_args.push(outer_arg);
+                    outer_pos += 3;
+                    inner_pos += 2;
 
-                outer_pos += 3;
-                inner_pos += 2;
-
-
-                if safety_run_checks {
-
-                    // Now we assert if int1 <= int2
-                    let res = LLVMBuildICmp(
-                        builder,
-                        IntPredicate::IntULE as u32,
-                        outer_arg,
-                        next2_outer_arg,
-                        "safety_check".as_ptr() as *const c_char);
-                    safety_vals.push(res);
+                    if safety_run_checks {
+                        // Now we assert if int1 <= int2
+                        let res = LLVMBuildICmp(
+                            builder,
+                            IntPredicate::IntULE as u32,
+                            outer_arg,
+                            next2_outer_arg,
+                            "safety_check".as_ptr() as *const c_char,
+                        );
+                        safety_vals.push(res);
+                    }
                 }
             }
         }
-    }
 
-    if inner_param_num as usize != call_args.len() {
-        panic!("Args len shouldn't differ. Please report this. {} : {}", inner_param_num, call_args.len());
-    }
-
-    // Now add the safety checks.
-    if !safety_vals.is_empty() {
-        dbg!("Adding safety checks");
-        assert!(safety_run_checks);
-        // first we create one bb per check and two more for the fail and success case.
-        let fail_bb = LLVMAppendBasicBlockInContext(llcx, tgt, "ad_safety_fail".as_ptr() as *const c_char);
-        let success_bb = LLVMAppendBasicBlockInContext(llcx, tgt, "ad_safety_success".as_ptr() as *const c_char);
-        for i in 1..safety_vals.len() {
-            // 'or' all safety checks together
-            // Doing some binary tree style or'ing here would be more efficient,
-            // but I assume LLVM will opt it anyway
-            let prev = safety_vals[i - 1];
-            let curr = safety_vals[i];
-            let res = llvm::LLVMBuildOr(builder, prev, curr, "safety_check".as_ptr() as *const c_char);
-            safety_vals[i] = res;
+        if inner_param_num as usize != call_args.len() {
+            panic!(
+                "Args len shouldn't differ. Please report this. {} : {}",
+                inner_param_num,
+                call_args.len()
+            );
         }
-        LLVMBuildCondBr(builder, safety_vals.last().unwrap(), success_bb, fail_bb);
-        LLVMPositionBuilderAtEnd(builder, fail_bb);
 
+        // Now add the safety checks.
+        if !safety_vals.is_empty() {
+            dbg!("Adding safety checks");
+            assert!(safety_run_checks);
+            // first we create one bb per check and two more for the fail and success case.
+            let fail_bb = LLVMAppendBasicBlockInContext(
+                llcx,
+                tgt,
+                "ad_safety_fail".as_ptr() as *const c_char,
+            );
+            let success_bb = LLVMAppendBasicBlockInContext(
+                llcx,
+                tgt,
+                "ad_safety_success".as_ptr() as *const c_char,
+            );
+            for i in 1..safety_vals.len() {
+                // 'or' all safety checks together
+                // Doing some binary tree style or'ing here would be more efficient,
+                // but I assume LLVM will opt it anyway
+                let prev = safety_vals[i - 1];
+                let curr = safety_vals[i];
+                let res = llvm::LLVMBuildOr(
+                    builder,
+                    prev,
+                    curr,
+                    "safety_check".as_ptr() as *const c_char,
+                );
+                safety_vals[i] = res;
+            }
+            LLVMBuildCondBr(builder, safety_vals.last().unwrap(), success_bb, fail_bb);
+            LLVMPositionBuilderAtEnd(builder, fail_bb);
 
-        let panic_name: CString = get_panic_name(llmod);
+            let panic_name: CString = get_panic_name(llmod);
 
-        let mut arg_vec = vec![add_panic_msg_to_global(llmod, llcx)];
+            let mut arg_vec = vec![add_panic_msg_to_global(llmod, llcx)];
 
-        let fnc1 = llvm::LLVMGetNamedFunction(llmod, panic_name.as_ptr() as *const c_char);
-        assert!(fnc1.is_some());
-        let fnc1 = fnc1.unwrap();
-        let ty = LLVMRustGetFunctionType(fnc1);
-        let call = LLVMBuildCall2(builder, ty, fnc1, arg_vec.as_mut_ptr(), arg_vec.len(), panic_name.as_ptr() as *const c_char);
-        llvm::LLVMSetTailCall(call, 1);
-        llvm::LLVMBuildUnreachable(builder);
-        LLVMPositionBuilderAtEnd(builder, success_bb);
-    }
+            let fnc1 = llvm::LLVMGetNamedFunction(llmod, panic_name.as_ptr() as *const c_char);
+            assert!(fnc1.is_some());
+            let fnc1 = fnc1.unwrap();
+            let ty = LLVMRustGetFunctionType(fnc1);
+            let call = LLVMBuildCall2(
+                builder,
+                ty,
+                fnc1,
+                arg_vec.as_mut_ptr(),
+                arg_vec.len(),
+                panic_name.as_ptr() as *const c_char,
+            );
+            llvm::LLVMSetTailCall(call, 1);
+            llvm::LLVMBuildUnreachable(builder);
+            LLVMPositionBuilderAtEnd(builder, success_bb);
+        }
 
-    let inner_fnc_name = llvm::get_value_name(src);
-    let c_inner_fnc_name = CString::new(inner_fnc_name).unwrap();
+        let inner_fnc_name = llvm::get_value_name(src);
+        let c_inner_fnc_name = CString::new(inner_fnc_name).unwrap();
 
-    let mut struct_ret = LLVMBuildCall2(
-        builder,
-        f_ty,
-        src,
-        call_args.as_mut_ptr(),
-        call_args.len(),
-        c_inner_fnc_name.as_ptr(),
-    );
+        let mut struct_ret = LLVMBuildCall2(
+            builder,
+            f_ty,
+            src,
+            call_args.as_mut_ptr(),
+            call_args.len(),
+            c_inner_fnc_name.as_ptr(),
+        );
 
-    // Add dummy dbg info to our newly generated call, if we have any.
-    let inst = LLVMRustgetFirstNonPHIOrDbgOrLifetime(bb).unwrap();
-    let md_ty = llvm::LLVMGetMDKindIDInContext(
+        // Add dummy dbg info to our newly generated call, if we have any.
+        let inst = LLVMRustgetFirstNonPHIOrDbgOrLifetime(bb).unwrap();
+        let md_ty = llvm::LLVMGetMDKindIDInContext(
             llcx,
             "dbg".as_ptr() as *const c_char,
             "dbg".len() as c_uint,
         );
 
-    if LLVMRustHasMetadata(last_inst, md_ty) {
-        let md = LLVMRustDIGetInstMetadata(last_inst);
-        let md_val = LLVMMetadataAsValue(llcx, md);
-        let md2 = llvm::LLVMSetMetadata(struct_ret, md_ty, md_val);
-    } else {
-        trace!("No dbg info");
-    }
-
-    // Now clean up placeholder code.
-    LLVMRustEraseInstBefore(bb, last_inst);
-
-    let f_return_type = LLVMGetReturnType(LLVMGlobalGetValueType(src));
-    let f_is_struct = llvm::LLVMRustIsStructType(f_return_type);
-    let void_type = LLVMVoidTypeInContext(llcx);
-    // Now unwrap the struct_ret if it's actually a struct
-    if f_is_struct {
-        let num_elem_in_ret_struct = LLVMCountStructElementTypes(f_return_type);
-        if num_elem_in_ret_struct == 1 {
-            let inner_grad_name = "foo".to_string();
-            let c_inner_grad_name = CString::new(inner_grad_name).unwrap();
-            struct_ret = LLVMBuildExtractValue(builder, struct_ret, 0, c_inner_grad_name.as_ptr());
+        if LLVMRustHasMetadata(last_inst, md_ty) {
+            let md = LLVMRustDIGetInstMetadata(last_inst);
+            let md_val = LLVMMetadataAsValue(llcx, md);
+            let md2 = llvm::LLVMSetMetadata(struct_ret, md_ty, md_val);
+        } else {
+            trace!("No dbg info");
         }
-    }
-    if f_return_type != void_type {
-        let _ret = LLVMBuildRet(builder, struct_ret);
-    } else {
-        let _ret = LLVMBuildRetVoid(builder);
-    }
-    LLVMDisposeBuilder(builder);
-    let _fnc_ok =
-        LLVMVerifyFunction(tgt, llvm::LLVMVerifierFailureAction::LLVMAbortProcessAction);
+
+        // Now clean up placeholder code.
+        LLVMRustEraseInstBefore(bb, last_inst);
+
+        let f_return_type = LLVMGetReturnType(LLVMGlobalGetValueType(src));
+        let f_is_struct = llvm::LLVMRustIsStructType(f_return_type);
+        let void_type = LLVMVoidTypeInContext(llcx);
+        // Now unwrap the struct_ret if it's actually a struct
+        if f_is_struct {
+            let num_elem_in_ret_struct = LLVMCountStructElementTypes(f_return_type);
+            if num_elem_in_ret_struct == 1 {
+                let inner_grad_name = "foo".to_string();
+                let c_inner_grad_name = CString::new(inner_grad_name).unwrap();
+                struct_ret =
+                    LLVMBuildExtractValue(builder, struct_ret, 0, c_inner_grad_name.as_ptr());
+            }
+        }
+        if f_return_type != void_type {
+            let _ret = LLVMBuildRet(builder, struct_ret);
+        } else {
+            let _ret = LLVMBuildRetVoid(builder);
+        }
+        LLVMDisposeBuilder(builder);
+        let _fnc_ok =
+            LLVMVerifyFunction(tgt, llvm::LLVMVerifierFailureAction::LLVMAbortProcessAction);
     }
 }
 
 unsafe fn get_panic_name(llmod: &llvm::Module) -> CString {
     // The names are mangled and their ending changes based on a hash, so just take whichever.
-    let mut f = unsafe{LLVMGetFirstFunction(llmod)};
+    let mut f = unsafe { LLVMGetFirstFunction(llmod) };
     loop {
         if let Some(lf) = f {
-            f = unsafe {LLVMGetNextFunction(lf)};
+            f = unsafe { LLVMGetNextFunction(lf) };
             let fnc_name = llvm::get_value_name(lf);
             let fnc_name: String = String::from_utf8(fnc_name.to_vec()).unwrap();
             if fnc_name.starts_with("_ZN4core9panicking14panic_explicit") {
@@ -921,46 +940,53 @@ unsafe fn get_panic_name(llmod: &llvm::Module) -> CString {
 // Note: This worked even for panic=abort tests so seems solid enough for now.
 // TODO: Pick a panic function which allows displaying an errormessage.
 // TODO: We probably want to keep a handle at higher level and pass it down instead of searching.
-unsafe fn add_panic_msg_to_global<'a>(llmod: &'a llvm::Module, llcx: &'a llvm::Context) -> &'a llvm::Value {
+unsafe fn add_panic_msg_to_global<'a>(
+    llmod: &'a llvm::Module,
+    llcx: &'a llvm::Context,
+) -> &'a llvm::Value {
     unsafe {
-    use llvm::*;
+        use llvm::*;
 
-    // Convert the message to a CString
-    let msg = "autodiff safety check failed!";
-    let cmsg = CString::new(msg).unwrap();
+        // Convert the message to a CString
+        let msg = "autodiff safety check failed!";
+        let cmsg = CString::new(msg).unwrap();
 
-    let msg_global_name = "ad_safety_msg".to_string();
-    let cmsg_global_name = CString::new(msg_global_name).unwrap();
+        let msg_global_name = "ad_safety_msg".to_string();
+        let cmsg_global_name = CString::new(msg_global_name).unwrap();
 
-    // Get the length of the message
-    let msg_len = msg.len();
+        // Get the length of the message
+        let msg_len = msg.len();
 
-    // Create the array type
-    let i8_array_type = LLVMArrayType2(LLVMInt8TypeInContext(llcx), msg_len as u64);
+        // Create the array type
+        let i8_array_type = LLVMArrayType2(LLVMInt8TypeInContext(llcx), msg_len as u64);
 
-    // Create the string constant
-    let string_const_val = LLVMConstStringInContext2(llcx, cmsg.as_ptr() as *const i8, msg_len as usize, 0);
+        // Create the string constant
+        let string_const_val =
+            LLVMConstStringInContext2(llcx, cmsg.as_ptr() as *const i8, msg_len as usize, 0);
 
-    // Create the array initializer
-    let mut array_elems: Vec<_> = Vec::with_capacity(msg_len);
-    for i in 0..msg_len {
-        let char_value = LLVMConstInt(LLVMInt8TypeInContext(llcx), cmsg.as_bytes()[i] as u64, 0);
-        array_elems.push(char_value);
-    }
-    let array_initializer = LLVMConstArray2(LLVMInt8TypeInContext(llcx), array_elems.as_mut_ptr(), msg_len as u64);
+        // Create the array initializer
+        let mut array_elems: Vec<_> = Vec::with_capacity(msg_len);
+        for i in 0..msg_len {
+            let char_value =
+                LLVMConstInt(LLVMInt8TypeInContext(llcx), cmsg.as_bytes()[i] as u64, 0);
+            array_elems.push(char_value);
+        }
+        let array_initializer =
+            LLVMConstArray2(LLVMInt8TypeInContext(llcx), array_elems.as_mut_ptr(), msg_len as u64);
 
-    // Create the struct type
-    let global_type = LLVMStructTypeInContext(llcx, [i8_array_type].as_mut_ptr(), 1, 0);
+        // Create the struct type
+        let global_type = LLVMStructTypeInContext(llcx, [i8_array_type].as_mut_ptr(), 1, 0);
 
-    // Create the struct initializer
-    let struct_initializer = LLVMConstStructInContext(llcx, [array_initializer].as_mut_ptr(), 1, 0);
+        // Create the struct initializer
+        let struct_initializer =
+            LLVMConstStructInContext(llcx, [array_initializer].as_mut_ptr(), 1, 0);
 
-    // Add the global variable to the module
-    let global_var = LLVMAddGlobal(llmod, global_type, cmsg_global_name.as_ptr() as *const i8);
-    LLVMRustSetLinkage(global_var, Linkage::PrivateLinkage);
-    LLVMSetInitializer(global_var, struct_initializer);
+        // Add the global variable to the module
+        let global_var = LLVMAddGlobal(llmod, global_type, cmsg_global_name.as_ptr() as *const i8);
+        LLVMRustSetLinkage(global_var, Linkage::PrivateLinkage);
+        LLVMSetInitializer(global_var, struct_initializer);
 
-    global_var
+        global_var
     }
 }
 use rustc_errors::DiagCtxt;
@@ -986,7 +1012,7 @@ pub(crate) unsafe fn enzyme_ad(
     // get target and source function
     let name = CString::new(rust_name.to_owned()).unwrap();
     let name2 = CString::new(rust_name2.clone()).unwrap();
-    let src_fnc_opt = unsafe {llvm::LLVMGetNamedFunction(llmod, name.as_c_str().as_ptr())};
+    let src_fnc_opt = unsafe { llvm::LLVMGetNamedFunction(llmod, name.as_c_str().as_ptr()) };
     let src_fnc = match src_fnc_opt {
         Some(x) => x,
         None => {
@@ -1000,7 +1026,7 @@ pub(crate) unsafe fn enzyme_ad(
             ));
         }
     };
-    let target_fnc_opt = unsafe {llvm::LLVMGetNamedFunction(llmod, name2.as_ptr())};
+    let target_fnc_opt = unsafe { llvm::LLVMGetNamedFunction(llmod, name2.as_ptr()) };
     let target_fnc = match target_fnc_opt {
         Some(x) => x,
         None => {
@@ -1014,13 +1040,13 @@ pub(crate) unsafe fn enzyme_ad(
             ));
         }
     };
-    let src_num_args = unsafe {llvm::LLVMCountParams(src_fnc)};
-    let target_num_args = unsafe {llvm::LLVMCountParams(target_fnc)};
+    let src_num_args = unsafe { llvm::LLVMCountParams(src_fnc) };
+    let target_num_args = unsafe { llvm::LLVMCountParams(target_fnc) };
     // A really simple check
     assert!(src_num_args <= target_num_args);
 
     let type_analysis: EnzymeTypeAnalysisRef =
-        unsafe {CreateTypeAnalysis(logic_ref, std::ptr::null_mut(), std::ptr::null_mut(), 0)};
+        unsafe { CreateTypeAnalysis(logic_ref, std::ptr::null_mut(), std::ptr::null_mut(), 0) };
 
     llvm::set_strict_aliasing(false);
 
@@ -1111,12 +1137,10 @@ pub(crate) unsafe fn differentiate(
         let llvm_data_layout =
             std::str::from_utf8(unsafe { CStr::from_ptr(llvm_data_layout) }.to_bytes())
                 .expect("got a non-UTF8 data-layout from LLVM");
-        let tt: FncTree = FncTree {
-            args: item.inputs.clone(),
-            ret: item.output.clone(),
-        };
+        let tt: FncTree = FncTree { args: item.inputs.clone(), ret: item.output.clone() };
         let name = CString::new(item.source.clone()).unwrap();
-        let fn_def: &llvm::Value = unsafe {llvm::LLVMGetNamedFunction(llmod, name.as_ptr()).unwrap()};
+        let fn_def: &llvm::Value =
+            unsafe { llvm::LLVMGetNamedFunction(llmod, name.as_ptr()).unwrap() };
         crate::builder::add_tt2(llmod, llcx, fn_def, tt);
 
         // Before dumping the module, we also might want to add dummy functions,  which will
@@ -1155,15 +1179,15 @@ pub(crate) unsafe fn differentiate(
                 assert!(*width >= 1);
                 llvm::set_max_type_offset(*width);
             }
-            _ => {},
+            _ => {}
         }
-    };
+    }
 
     let differentiate = !diff_items.is_empty();
     let mut first_order_items: Vec<AutoDiffItem> = vec![];
     let mut higher_order_items: Vec<AutoDiffItem> = vec![];
     for item in diff_items {
-        if item.attrs.mode == DiffMode::ForwardFirst || item.attrs.mode == DiffMode::ReverseFirst{
+        if item.attrs.mode == DiffMode::ForwardFirst || item.attrs.mode == DiffMode::ReverseFirst {
             first_order_items.push(item);
         } else {
             // default
@@ -1171,15 +1195,15 @@ pub(crate) unsafe fn differentiate(
         }
     }
 
-
     let fnc_opt = ad.contains(&AutoDiff::EnableFncOpt);
 
     // If a function is a base for some higher order ad, always optimize
     let fnc_opt_base = true;
-    let logic_ref_opt: EnzymeLogicRef = unsafe {CreateEnzymeLogic(fnc_opt_base as u8)};
+    let logic_ref_opt: EnzymeLogicRef = unsafe { CreateEnzymeLogic(fnc_opt_base as u8) };
 
     for item in first_order_items {
-        let res = unsafe{enzyme_ad(llmod, llcx, &diag_handler.handle(), item, logic_ref_opt, ad)};
+        let res =
+            unsafe { enzyme_ad(llmod, llcx, &diag_handler.handle(), item, logic_ref_opt, ad) };
         assert!(res.is_ok());
     }
 
@@ -1190,10 +1214,10 @@ pub(crate) unsafe fn differentiate(
             dbg!("Enable extra optimizations for Enzyme");
             logic_ref_opt
         }
-        false => unsafe {CreateEnzymeLogic(fnc_opt as u8)},
+        false => unsafe { CreateEnzymeLogic(fnc_opt as u8) },
     };
     for item in higher_order_items {
-        let res = unsafe{ enzyme_ad(llmod, llcx, &diag_handler.handle(), item, logic_ref, ad)};
+        let res = unsafe { enzyme_ad(llmod, llcx, &diag_handler.handle(), item, logic_ref, ad) };
         assert!(res.is_ok());
     }
 
@@ -1232,7 +1256,6 @@ pub(crate) unsafe fn differentiate(
         }
     }
 
-
     if ad.contains(&AutoDiff::NoModOptAfter) || !differentiate {
         trace!("Skipping module optimization after automatic differentiation");
     } else {
@@ -1254,7 +1277,18 @@ pub(crate) unsafe fn differentiate(
                 first_run = true;
             }
             let noop = false;
-            unsafe {llvm_optimize(cgcx, diag_handler.handle(), module, config, opt_level, opt_stage, first_run, noop)?};
+            unsafe {
+                llvm_optimize(
+                    cgcx,
+                    diag_handler.handle(),
+                    module,
+                    config,
+                    opt_level,
+                    opt_stage,
+                    first_run,
+                    noop,
+                )?
+            };
         }
         if ad.contains(&AutoDiff::AltPipeline) {
             dbg!("Running Second postAD optimization");
@@ -1272,7 +1306,18 @@ pub(crate) unsafe fn differentiate(
                     first_run = false;
                 }
                 let noop = false;
-                unsafe {llvm_optimize(cgcx, diag_handler.handle(), module, config, opt_level, opt_stage, first_run, noop)?};
+                unsafe {
+                    llvm_optimize(
+                        cgcx,
+                        diag_handler.handle(),
+                        module,
+                        config,
+                        opt_level,
+                        opt_stage,
+                        first_run,
+                        noop,
+                    )?
+                };
             }
         }
     }
@@ -1366,7 +1411,9 @@ pub(crate) unsafe fn optimize(
         //} else {
         //    noop = false;
         //}
-        return unsafe { llvm_optimize(cgcx, dcx, module, config, opt_level, opt_stage, first_run, noop) };
+        return unsafe {
+            llvm_optimize(cgcx, dcx, module, config, opt_level, opt_stage, first_run, noop)
+        };
     }
     Ok(())
 }

@@ -1,13 +1,13 @@
-use crate::back::write::ModuleConfig;
-use rustc_ast::expand::autodiff_attrs::AutoDiffItem;
-use rustc_data_structures::{fx::FxHashMap, memmap::Mmap};
-
 use std::ffi::CString;
 use std::sync::Arc;
 
+use rustc_ast::expand::autodiff_attrs::AutoDiffItem;
+use rustc_data_structures::fx::FxHashMap;
+use rustc_data_structures::memmap::Mmap;
 use rustc_errors::FatalError;
 
 use super::write::CodegenContext;
+use crate::back::write::ModuleConfig;
 use crate::traits::*;
 use crate::ModuleCodegen;
 

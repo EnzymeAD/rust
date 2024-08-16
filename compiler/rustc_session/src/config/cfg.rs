@@ -326,7 +326,6 @@ impl CheckCfg {
         // Don't forget to update `src/doc/rustc/src/check-cfg.md`
         // in the unstable book as well!
 
-
         ins!(sym::autodiff_fallback, no_values);
         ins!(sym::debug_assertions, no_values);
 

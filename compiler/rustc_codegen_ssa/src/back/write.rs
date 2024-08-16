@@ -1,5 +1,3 @@
-use rustc_ast::expand::autodiff_attrs::AutoDiffItem;
-
 use std::any::Any;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
@@ -9,6 +7,7 @@ use std::{fs, io, mem, str, thread};
 
 use jobserver::{Acquired, Client};
 use rustc_ast::attr;
+use rustc_ast::expand::autodiff_attrs::AutoDiffItem;
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_data_structures::memmap::Mmap;
 use rustc_data_structures::profiling::{SelfProfilerRef, VerboseTimingGuard};
@@ -43,7 +42,7 @@ use tracing::debug;
 use super::link::{self, ensure_removed};
 use super::lto::{self, SerializedModule};
 use super::symbol_export::symbol_name_for_instance_in_crate;
-use crate::errors::{ErrorCreatingRemarkDir, AutodiffWithoutLto};
+use crate::errors::{AutodiffWithoutLto, ErrorCreatingRemarkDir};
 use crate::traits::*;
 use crate::{
     errors, CachedModuleCodegen, CodegenResults, CompiledModule, CrateInfo, ModuleCodegen,
@@ -424,7 +423,7 @@ fn generate_lto_work<B: ExtraBackendMethods>(
     } else {
         if !autodiff.is_empty() {
             let dcx = cgcx.create_dcx();
-            dcx.handle().emit_fatal(AutodiffWithoutLto{});
+            dcx.handle().emit_fatal(AutodiffWithoutLto {});
         }
         assert!(needs_fat_lto.is_empty());
         let (lto_modules, copy_jobs) = B::run_thin_lto(cgcx, needs_thin_lto, import_only_modules)
@@ -1614,7 +1613,6 @@ fn start_executing_work<B: ExtraBackendMethods>(
                         }
                     }
                 }
-
 
                 Message::CodegenDone { mut llvm_work_item, cost } => {
                     //// extract build typetrees

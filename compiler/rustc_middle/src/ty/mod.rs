@@ -11,8 +11,6 @@
 
 #![allow(rustc::usage_of_ty_tykind)]
 
-use rustc_target::abi::FieldsShape;
-
 use std::assert_matches::assert_matches;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
@@ -49,7 +47,7 @@ pub use rustc_session::lint::RegisteredTools;
 use rustc_span::hygiene::MacroKind;
 use rustc_span::symbol::{kw, sym, Ident, Symbol};
 use rustc_span::{ExpnId, ExpnKind, Span};
-use rustc_target::abi::{Align, FieldIdx, Integer, IntegerType, VariantIdx};
+use rustc_target::abi::{Align, FieldIdx, FieldsShape, Integer, IntegerType, VariantIdx};
 pub use rustc_target::abi::{ReprFlags, ReprOptions};
 pub use rustc_type_ir::relate::VarianceDiagInfo;
 pub use rustc_type_ir::ConstKind::{
@@ -61,7 +59,6 @@ use tracing::{debug, instrument};
 pub use vtable::*;
 use {rustc_ast as ast, rustc_attr as attr, rustc_hir as hir};
 
-pub use self::typetree::*;
 pub use self::closure::{
     analyze_coroutine_closure_captures, is_ancestor_or_same_capture, place_to_string_for_capture,
     BorrowKind, CaptureInfo, CapturedPlace, ClosureTypeInfo, MinCaptureInformationMap,
@@ -105,6 +102,7 @@ pub use self::typeck_results::{
     CanonicalUserType, CanonicalUserTypeAnnotation, CanonicalUserTypeAnnotations, IsIdentity,
     TypeckResults, UserType, UserTypeAnnotationIndex,
 };
+pub use self::typetree::*;
 pub use self::visit::{TypeSuperVisitable, TypeVisitable, TypeVisitableExt, TypeVisitor};
 pub use self::AssocItemContainer::*;
 pub use self::BorrowKind::*;
@@ -135,11 +133,11 @@ pub mod pattern;
 pub mod print;
 pub mod relate;
 pub mod trait_def;
+pub mod typetree;
 pub mod util;
 pub mod visit;
 pub mod vtable;
 pub mod walk;
-pub mod typetree;
 
 mod adt;
 mod assoc;

@@ -17,12 +17,6 @@
 #![feature(rustdoc_internals)]
 // tidy-alphabetical-end
 
-use errors::{ParseTargetMachineConfig, AutoDiffWithoutLTO};
-#[allow(unused_imports)]
-use llvm::TypeTree;
-use rustc_session::config::Lto;
-use rustc_ast::expand::autodiff_attrs::AutoDiffItem;
-
 use std::any::Any;
 use std::ffi::CStr;
 use std::io::Write;
@@ -30,21 +24,25 @@ use std::mem::ManuallyDrop;
 
 use back::owned_target_machine::OwnedTargetMachine;
 use back::write::{create_informational_target_machine, create_target_machine};
+use errors::{AutoDiffWithoutLTO, ParseTargetMachineConfig};
+#[allow(unused_imports)]
+use llvm::TypeTree;
 pub use llvm_util::target_features;
 use rustc_ast::expand::allocator::AllocatorKind;
+use rustc_ast::expand::autodiff_attrs::AutoDiffItem;
 use rustc_codegen_ssa::back::lto::{LtoModuleCodegen, SerializedModule, ThinModule};
 use rustc_codegen_ssa::back::write::{
     CodegenContext, FatLtoInput, ModuleConfig, TargetMachineFactoryConfig, TargetMachineFactoryFn,
 };
 use rustc_codegen_ssa::traits::*;
 use rustc_codegen_ssa::{CodegenResults, CompiledModule, ModuleCodegen};
-use rustc_data_structures::fx::{FxHashMap,FxIndexMap};
+use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_errors::{DiagCtxtHandle, ErrorGuaranteed, FatalError};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::util::Providers;
-use rustc_session::config::{OptLevel, OutputFilenames, PrintKind, PrintRequest};
+use rustc_session::config::{Lto, OptLevel, OutputFilenames, PrintKind, PrintRequest};
 use rustc_session::Session;
 use rustc_span::symbol::Symbol;
 
@@ -264,7 +262,7 @@ impl WriteBackendMethods for LlvmCodegenBackend {
     ) -> Result<(), FatalError> {
         if cgcx.lto != Lto::Fat {
             let dcx = cgcx.create_dcx();
-            return Err(dcx.handle().emit_almost_fatal(AutoDiffWithoutLTO{}));
+            return Err(dcx.handle().emit_almost_fatal(AutoDiffWithoutLTO {}));
         }
         unsafe { back::write::differentiate(module, cgcx, diff_fncs, typetrees, config) }
     }
@@ -493,7 +491,10 @@ impl ModuleLlvm {
                 }
             };
 
-            Ok(ModuleLlvm { llmod_raw, llcx, tm: ManuallyDrop::new(tm),
+            Ok(ModuleLlvm {
+                llmod_raw,
+                llcx,
+                tm: ManuallyDrop::new(tm),
                 typetrees: Default::default(),
             })
         }

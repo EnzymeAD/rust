@@ -1,5 +1,4 @@
 use rustc_ast::expand::typetree::FncTree;
-
 use rustc_middle::middle::codegen_fn_attrs::CodegenFnAttrs;
 use rustc_middle::ty::layout::{HasParamEnv, TyAndLayout};
 use rustc_middle::ty::{Instance, Ty};

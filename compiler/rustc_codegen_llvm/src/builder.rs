@@ -2,12 +2,9 @@ use std::borrow::Cow;
 use std::ops::Deref;
 use std::{iter, ptr};
 
-use rustc_ast::expand::autodiff_attrs::{AutoDiffAttrs, DiffActivity};
-use rustc_ast::expand::autodiff_attrs::DiffMode;
-use crate::typetree::to_enzyme_typetree;
-use rustc_ast::expand::typetree::{TypeTree, FncTree};
-
 use libc::{c_char, c_uint};
+use rustc_ast::expand::autodiff_attrs::{AutoDiffAttrs, DiffActivity, DiffMode};
+use rustc_ast::expand::typetree::{FncTree, TypeTree};
 use rustc_codegen_ssa::common::{IntPredicate, RealPredicate, SynchronizationScope, TypeKind};
 use rustc_codegen_ssa::mir::operand::{OperandRef, OperandValue};
 use rustc_codegen_ssa::mir::place::PlaceRef;
@@ -28,7 +25,7 @@ use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{self, Align, Size, WrappingRange};
 use rustc_target::spec::{HasTargetSpec, SanitizerSet, Target};
 use smallvec::SmallVec;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, trace};
 
 use crate::abi::FnAbiLlvmExt;
 use crate::common::Funclet;
@@ -36,12 +33,16 @@ use crate::context::CodegenCx;
 use crate::llvm::{self, AtomicOrdering, AtomicRmwBinOp, BasicBlock, False, True};
 use crate::type_::Type;
 use crate::type_of::LayoutLlvmExt;
+use crate::typetree::to_enzyme_typetree;
 use crate::value::Value;
 use crate::{attributes, llvm_util};
 
-use tracing::trace;
-
-pub fn add_tt2<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context, fn_def: &'ll Value, tt: FncTree) {
+pub fn add_tt2<'ll>(
+    llmod: &'ll llvm::Module,
+    llcx: &'ll llvm::Context,
+    fn_def: &'ll Value,
+    tt: FncTree,
+) {
     let inputs = tt.args;
     let ret_tt: TypeTree = tt.ret;
     let llvm_data_layout: *const c_char = unsafe { llvm::LLVMGetDataLayoutStr(&*llmod) };
@@ -86,7 +87,13 @@ pub fn add_tt2<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context, fn_def: 
 }
 
 #[allow(unused)]
-pub fn add_opt_dbg_helper<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context, val: &'ll Value, attrs: AutoDiffAttrs, i: usize) {
+pub fn add_opt_dbg_helper<'ll>(
+    llmod: &'ll llvm::Module,
+    llcx: &'ll llvm::Context,
+    val: &'ll Value,
+    attrs: AutoDiffAttrs,
+    i: usize,
+) {
     let inputs = attrs.input_activity;
     let outputs = attrs.ret_activity;
     let ad_name = match attrs.mode {
@@ -127,16 +134,24 @@ pub fn add_opt_dbg_helper<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Contex
             wrapper_name.len().try_into().unwrap(),
             fn_ty,
         );
-        let entry = llvm::LLVMAppendBasicBlockInContext(llcx, wrapper_fn, "entry".as_ptr() as *const c_char);
+        let entry = llvm::LLVMAppendBasicBlockInContext(
+            llcx,
+            wrapper_fn,
+            "entry".as_ptr() as *const c_char,
+        );
         let builder = llvm::LLVMCreateBuilderInContext(llcx);
         llvm::LLVMPositionBuilderAtEnd(builder, entry);
         let num_args = llvm::LLVMCountParams(wrapper_fn);
         let mut args = Vec::with_capacity(num_args as usize + 1);
         args.push(val);
-        let enzyme_const = llvm::LLVMMDStringInContext(llcx, "enzyme_const".as_ptr() as *const c_char, 12);
-        let enzyme_out = llvm::LLVMMDStringInContext(llcx, "enzyme_out".as_ptr() as *const c_char, 10);
-        let enzyme_dup = llvm::LLVMMDStringInContext(llcx, "enzyme_dup".as_ptr() as *const c_char, 10);
-        let enzyme_dupnoneed = llvm::LLVMMDStringInContext(llcx, "enzyme_dupnoneed".as_ptr() as *const c_char, 16);
+        let enzyme_const =
+            llvm::LLVMMDStringInContext(llcx, "enzyme_const".as_ptr() as *const c_char, 12);
+        let enzyme_out =
+            llvm::LLVMMDStringInContext(llcx, "enzyme_out".as_ptr() as *const c_char, 10);
+        let enzyme_dup =
+            llvm::LLVMMDStringInContext(llcx, "enzyme_dup".as_ptr() as *const c_char, 10);
+        let enzyme_dupnoneed =
+            llvm::LLVMMDStringInContext(llcx, "enzyme_dupnoneed".as_ptr() as *const c_char, 16);
         final_num_args = num_args * 2 + 1;
         for i in 0..num_args {
             let arg = llvm::LLVMGetParam(wrapper_fn, i);
@@ -167,7 +182,14 @@ pub fn add_opt_dbg_helper<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Contex
         //   ret void
         // }
 
-        let call = llvm::LLVMBuildCall2(builder, enzyme_ty, ad_fn, args.as_mut_ptr(), final_num_args as usize, ad_name.as_ptr() as *const c_char);
+        let call = llvm::LLVMBuildCall2(
+            builder,
+            enzyme_ty,
+            ad_fn,
+            args.as_mut_ptr(),
+            final_num_args as usize,
+            ad_name.as_ptr() as *const c_char,
+        );
         let void_ty = llvm::LLVMVoidTypeInContext(llcx);
         if llvm::LLVMTypeOf(call) != void_ty {
             llvm::LLVMBuildRet(builder, call);
@@ -176,13 +198,14 @@ pub fn add_opt_dbg_helper<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Contex
         }
         llvm::LLVMDisposeBuilder(builder);
 
-        let _fnc_ok =
-            llvm::LLVMVerifyFunction(wrapper_fn, llvm::LLVMVerifierFailureAction::LLVMAbortProcessAction);
+        let _fnc_ok = llvm::LLVMVerifyFunction(
+            wrapper_fn,
+            llvm::LLVMVerifierFailureAction::LLVMAbortProcessAction,
+        );
     }
-
 }
 
-fn add_tt<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context,val: &'ll Value, tt: FncTree) {
+fn add_tt<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context, val: &'ll Value, tt: FncTree) {
     let inputs = tt.args;
     let _ret: TypeTree = tt.ret;
     let llvm_data_layout: *const c_char = unsafe { llvm::LLVMGetDataLayoutStr(&*llmod) };

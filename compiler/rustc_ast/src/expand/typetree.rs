@@ -1,8 +1,6 @@
-use crate::expand::HashStable_Generic;
-use crate::expand::Encodable;
-use crate::expand::Decodable;
-
 use std::fmt;
+
+use crate::expand::{Decodable, Encodable, HashStable_Generic};
 
 #[derive(Clone, Eq, PartialEq, Encodable, Decodable, Debug, HashStable_Generic)]
 pub enum Kind {
@@ -28,7 +26,12 @@ impl TypeTree {
     pub fn int(size: usize) -> Self {
         let mut ints = Vec::with_capacity(size);
         for i in 0..size {
-            ints.push(Type { offset: i as isize, size: 1, kind: Kind::Integer, child: TypeTree::new() });
+            ints.push(Type {
+                offset: i as isize,
+                size: 1,
+                kind: Kind::Integer,
+                child: TypeTree::new(),
+            });
         }
         Self(ints)
     }

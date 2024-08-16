@@ -92,21 +92,13 @@
 //! source-level module, functions from the same module will be available for
 //! inlining, even when they are not marked `#[inline]`.
 
-use tracing::trace;
 use std::cmp;
 use std::collections::hash_map::Entry;
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-use rustc_ast::expand::autodiff_attrs::{AutoDiffItem, AutoDiffAttrs};
-use rustc_middle::ty::{
-    self, visit::TypeVisitableExt, ParamEnv, TyCtxt,
-    fnc_typetrees
-};
-use rustc_symbol_mangling::symbol_name_for_instance_in_crate;
-use rustc_ast::expand::autodiff_attrs::DiffActivity;
-
+use rustc_ast::expand::autodiff_attrs::{AutoDiffAttrs, AutoDiffItem, DiffActivity};
 use rustc_data_structures::fx::{FxIndexMap, FxIndexSet};
 use rustc_data_structures::sync;
 use rustc_data_structures::unord::{UnordMap, UnordSet};
@@ -122,12 +114,14 @@ use rustc_middle::mir::mono::{
     Visibility,
 };
 use rustc_middle::ty::print::{characteristic_def_id_of_type, with_no_trimmed_paths};
-use rustc_middle::ty::InstanceKind;
+use rustc_middle::ty::visit::TypeVisitableExt;
+use rustc_middle::ty::{self, fnc_typetrees, InstanceKind, ParamEnv, TyCtxt};
 use rustc_middle::util::Providers;
 use rustc_session::config::{DumpMonoStatsFormat, SwitchWithOptPath};
 use rustc_session::CodegenUnits;
 use rustc_span::symbol::Symbol;
-use tracing::debug;
+use rustc_symbol_mangling::symbol_name_for_instance_in_crate;
+use tracing::{debug, trace};
 
 use crate::collector::{self, MonoItemCollectionStrategy, UsageMap};
 use crate::errors::{CouldntDumpMonoStats, SymbolAlreadyDefined, UnknownCguCollectionMode};
@@ -1112,7 +1106,10 @@ where
     }
 }
 
-fn collect_and_partition_mono_items(tcx: TyCtxt<'_>, (): ()) -> (&DefIdSet, &[AutoDiffItem], &[CodegenUnit<'_>]) {
+fn collect_and_partition_mono_items(
+    tcx: TyCtxt<'_>,
+    (): (),
+) -> (&DefIdSet, &[AutoDiffItem], &[CodegenUnit<'_>]) {
     let collection_strategy = match tcx.sess.opts.unstable_opts.print_mono_items {
         Some(ref s) => {
             let mode = s.to_lowercase();
@@ -1179,53 +1176,53 @@ fn collect_and_partition_mono_items(tcx: TyCtxt<'_>, (): ()) -> (&DefIdSet, &[Au
         .filter_map(|item| match *item {
             MonoItem::Fn(ref instance) => Some((item, instance)),
             _ => None,
-        }).collect();
+        })
+        .collect();
     let mut autodiff_items: Vec<AutoDiffItem> = vec![];
 
     for (item, instance) in autodiff_items2 {
-            let target_id = instance.def_id();
-            let target_attrs: &AutoDiffAttrs = tcx.autodiff_attrs(target_id);
-            let mut input_activities: Vec<DiffActivity> = target_attrs.input_activity.clone();
-            if target_attrs.is_source() {
-                trace!("source found: {:?}", target_id);
-            }
-            if !target_attrs.apply_autodiff() {
-                continue;
-            }
+        let target_id = instance.def_id();
+        let target_attrs: &AutoDiffAttrs = tcx.autodiff_attrs(target_id);
+        let mut input_activities: Vec<DiffActivity> = target_attrs.input_activity.clone();
+        if target_attrs.is_source() {
+            trace!("source found: {:?}", target_id);
+        }
+        if !target_attrs.apply_autodiff() {
+            continue;
+        }
 
-            let target_symbol =
-                symbol_name_for_instance_in_crate(tcx, instance.clone(), LOCAL_CRATE);
+        let target_symbol = symbol_name_for_instance_in_crate(tcx, instance.clone(), LOCAL_CRATE);
 
-            let source =
-                usage_map.used_map.get(&item).unwrap().into_iter().find_map(|item| match *item {
-                    MonoItem::Fn(ref instance_s) => {
-                        let source_id = instance_s.def_id();
-                        if tcx.autodiff_attrs(source_id).is_active() {
-                            return Some(instance_s);
-                        }
-                        None
+        let source =
+            usage_map.used_map.get(&item).unwrap().into_iter().find_map(|item| match *item {
+                MonoItem::Fn(ref instance_s) => {
+                    let source_id = instance_s.def_id();
+                    if tcx.autodiff_attrs(source_id).is_active() {
+                        return Some(instance_s);
                     }
-                    _ => None,
-                });
-            let inst = match source {
-                Some(source) => source,
-                None => continue,
-            };
+                    None
+                }
+                _ => None,
+            });
+        let inst = match source {
+            Some(source) => source,
+            None => continue,
+        };
 
-            println!("source_id: {:?}", inst.def_id());
-            let fn_ty = inst.ty(tcx, ParamEnv::empty());
-            assert!(fn_ty.is_fn());
-            let span = tcx.def_span(inst.def_id());
-            let fnc_tree = fnc_typetrees(tcx, fn_ty, &mut input_activities, Some(span));
-            let (inputs, output) = (fnc_tree.args, fnc_tree.ret);
-            //check_types(inst.ty(tcx, ParamEnv::empty()), tcx, &target_attrs.input_activity);
-            let symb = symbol_name_for_instance_in_crate(tcx, inst.clone(), LOCAL_CRATE);
+        println!("source_id: {:?}", inst.def_id());
+        let fn_ty = inst.ty(tcx, ParamEnv::empty());
+        assert!(fn_ty.is_fn());
+        let span = tcx.def_span(inst.def_id());
+        let fnc_tree = fnc_typetrees(tcx, fn_ty, &mut input_activities, Some(span));
+        let (inputs, output) = (fnc_tree.args, fnc_tree.ret);
+        //check_types(inst.ty(tcx, ParamEnv::empty()), tcx, &target_attrs.input_activity);
+        let symb = symbol_name_for_instance_in_crate(tcx, inst.clone(), LOCAL_CRATE);
 
-            let mut new_target_attrs = target_attrs.clone();
-            new_target_attrs.input_activity = input_activities;
-            let itm = new_target_attrs.into_item(symb, target_symbol, inputs, output);
-            autodiff_items.push(itm);
-    };
+        let mut new_target_attrs = target_attrs.clone();
+        new_target_attrs.input_activity = input_activities;
+        let itm = new_target_attrs.into_item(symb, target_symbol, inputs, output);
+        autodiff_items.push(itm);
+    }
     let autodiff_items = tcx.arena.alloc_from_iter(autodiff_items);
 
     // Output monomorphization stats per def_id

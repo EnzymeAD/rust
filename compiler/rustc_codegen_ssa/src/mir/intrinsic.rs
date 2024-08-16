@@ -1,14 +1,12 @@
-use tracing::trace;
-use rustc_middle::ty::typetree_from;
-use rustc_ast::expand::typetree::{TypeTree, FncTree};
+use rustc_ast::expand::typetree::{FncTree, TypeTree};
 use rustc_middle::ty::layout::HasTyCtxt;
-
-use rustc_middle::ty::{self, Ty, TyCtxt};
+use rustc_middle::ty::{self, typetree_from, Ty, TyCtxt};
 use rustc_middle::{bug, span_bug};
 use rustc_session::config::OptLevel;
 use rustc_span::{sym, Span};
 use rustc_target::abi::call::{FnAbi, PassMode};
 use rustc_target::abi::WrappingRange;
+use tracing::trace;
 
 use super::operand::OperandRef;
 use super::place::PlaceRef;
@@ -28,10 +26,8 @@ fn copy_intrinsic<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
 ) {
     let tcx: TyCtxt<'_> = bx.cx().tcx();
     let tt: TypeTree = typetree_from(tcx, ty);
-    let fnc_tree: FncTree = FncTree {
-        args: vec![tt.clone(), tt.clone(), TypeTree::all_ints()],
-        ret: TypeTree::new(),
-    };
+    let fnc_tree: FncTree =
+        FncTree { args: vec![tt.clone(), tt.clone(), TypeTree::all_ints()], ret: TypeTree::new() };
 
     let layout = bx.layout_of(ty);
     let size = layout.size;
@@ -56,10 +52,8 @@ fn memset_intrinsic<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
 ) {
     let tcx: TyCtxt<'_> = bx.cx().tcx();
     let tt: TypeTree = typetree_from(tcx, ty);
-    let fnc_tree: FncTree = FncTree {
-        args: vec![tt.clone(), tt.clone(), TypeTree::all_ints()],
-        ret: TypeTree::new(),
-    };
+    let fnc_tree: FncTree =
+        FncTree { args: vec![tt.clone(), tt.clone(), TypeTree::all_ints()], ret: TypeTree::new() };
 
     let layout = bx.layout_of(ty);
     let size = layout.size;

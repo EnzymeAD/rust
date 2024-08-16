@@ -1,24 +1,23 @@
-use crate::errors;
-use rustc_ast::expand::autodiff_attrs::{AutoDiffAttrs, DiffActivity, DiffMode, is_fwd, is_rev, valid_input_activity, valid_ty_for_activity};
+use std::str::FromStr;
+use std::string::String;
+
+use rustc_ast::ast::Generics;
+use rustc_ast::expand::autodiff_attrs::{
+    is_fwd, is_rev, valid_input_activity, valid_ty_for_activity, AutoDiffAttrs, DiffActivity,
+    DiffMode,
+};
 use rustc_ast::ptr::P;
 use rustc_ast::token::{Token, TokenKind};
 use rustc_ast::tokenstream::*;
-use rustc_ast::FnRetTy;
-use rustc_ast::{self as ast, NestedMetaItem};//, FnHeader, FnSig, Generics, MetaItemKind, NestedMetaItem, StmtKind};
-use rustc_ast::{ItemKind, PatKind, TyKind};
+use rustc_ast::{self as ast, NestedMetaItem}; //, FnHeader, FnSig, Generics, MetaItemKind, NestedMetaItem, StmtKind};
+use rustc_ast::{AssocItemKind, FnRetTy, FnSig, ItemKind, PatKind, TyKind};
 use rustc_expand::base::{Annotatable, ExtCtxt};
 use rustc_span::symbol::{kw, sym, Ident};
-use rustc_span::Span;
-use rustc_span::Symbol;
-use std::string::String;
+use rustc_span::{Span, Symbol};
 use thin_vec::{thin_vec, ThinVec};
-use std::str::FromStr;
-use rustc_ast::ast::Generics;
-use rustc_ast::FnSig;
-
-use rustc_ast::AssocItemKind;
 use tracing::trace;
 
+use crate::errors;
 
 #[cfg(not(llvm_enzyme))]
 pub fn expand(
@@ -44,15 +43,20 @@ fn name(x: &NestedMetaItem) -> String {
 }
 
 #[cfg(llvm_enzyme)]
-pub fn from_ast(ecx: &mut ExtCtxt<'_>, meta_item: &ThinVec<NestedMetaItem>, has_ret: bool) -> AutoDiffAttrs {
-
+pub fn from_ast(
+    ecx: &mut ExtCtxt<'_>,
+    meta_item: &ThinVec<NestedMetaItem>,
+    has_ret: bool,
+) -> AutoDiffAttrs {
     let mode = name(&meta_item[1]);
     let mode = match DiffMode::from_str(&mode) {
         Ok(x) => x,
         Err(_) => {
-            ecx.sess.dcx().emit_err(errors::AutoDiffInvalidMode { span: meta_item[1].span(), mode});
+            ecx.sess
+                .dcx()
+                .emit_err(errors::AutoDiffInvalidMode { span: meta_item[1].span(), mode });
             return AutoDiffAttrs::inactive();
-        },
+        }
     };
     let mut activities: Vec<DiffActivity> = vec![];
     for x in &meta_item[2..] {
@@ -61,7 +65,10 @@ pub fn from_ast(ecx: &mut ExtCtxt<'_>, meta_item: &ThinVec<NestedMetaItem>, has_
         match res {
             Ok(x) => activities.push(x),
             Err(_) => {
-                ecx.sess.dcx().emit_err(errors::AutoDiffUnknownActivity { span: x.span(), act: activity_str });
+                ecx.sess.dcx().emit_err(errors::AutoDiffUnknownActivity {
+                    span: x.span(),
+                    act: activity_str,
+                });
                 return AutoDiffAttrs::inactive();
             }
         };
@@ -95,22 +102,26 @@ pub fn expand(
             let sig = match &iitem.kind {
                 ItemKind::Fn(box ast::Fn { sig, .. }) => sig,
                 _ => {
-                    ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
+                    ecx.sess
+                        .dcx()
+                        .emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
                     return vec![item];
                 }
             };
             (sig.clone(), false)
-        },
+        }
         Annotatable::AssocItem(ref assoc_item, AssocCtxt::Impl) => {
             let sig = match &assoc_item.kind {
                 ast::AssocItemKind::Fn(box ast::Fn { sig, .. }) => sig,
                 _ => {
-                    ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
+                    ecx.sess
+                        .dcx()
+                        .emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
                     return vec![item];
                 }
             };
             (sig.clone(), true)
-        },
+        }
         _ => {
             ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
             return vec![item];
@@ -129,12 +140,10 @@ pub fn expand(
     let sig_span = ecx.with_call_site_ctxt(sig.span);
 
     let (vis, primal) = match &item {
-        Annotatable::Item(ref iitem) => {
-            (iitem.vis.clone(), iitem.ident.clone())
-        },
+        Annotatable::Item(ref iitem) => (iitem.vis.clone(), iitem.ident.clone()),
         Annotatable::AssocItem(ref assoc_item, AssocCtxt::Impl) => {
             (assoc_item.vis.clone(), assoc_item.ident.clone())
-        },
+        }
         _ => {
             ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplication { span: item.span() });
             return vec![item];
@@ -167,7 +176,9 @@ pub fn expand(
     }
     let span = ecx.with_def_site_ctxt(expand_span);
 
-    let n_active: u32 = x.input_activity.iter()
+    let n_active: u32 = x
+        .input_activity
+        .iter()
         .filter(|a| **a == DiffActivity::Active || **a == DiffActivity::ActiveOnly)
         .count() as u32;
     let (d_sig, new_args, idents) = gen_enzyme_decl(ecx, &sig, &x, span);
@@ -196,11 +207,10 @@ pub fn expand(
     });
     let mut rustc_ad_attr =
         P(ast::NormalAttr::from_ident(Ident::with_dummy_span(sym::rustc_autodiff)));
-    let ts2: Vec<TokenTree> = vec![
-            TokenTree::Token(
-            Token::new(TokenKind::Ident(sym::never, false.into()), span),
-            Spacing::Joint,
-        )];
+    let ts2: Vec<TokenTree> = vec![TokenTree::Token(
+        Token::new(TokenKind::Ident(sym::never, false.into()), span),
+        Spacing::Joint,
+    )];
     let never_arg = ast::DelimArgs {
         dspan: ast::tokenstream::DelimSpan::from_single(span),
         delim: ast::token::Delimiter::Parenthesis,
@@ -212,10 +222,7 @@ pub fn expand(
         args: ast::AttrArgs::Delimited(never_arg),
         tokens: None,
     };
-    let inline_never_attr = P(ast::NormalAttr {
-        item: inline_item,
-        tokens: None,
-    });
+    let inline_never_attr = P(ast::NormalAttr { item: inline_item, tokens: None });
     let mut attr: ast::Attribute = ast::Attribute {
         kind: ast::AttrKind::Normal(rustc_ad_attr.clone()),
         //id: ast::DUMMY_TR_ID,
@@ -223,7 +230,7 @@ pub fn expand(
         style: ast::AttrStyle::Outer,
         span,
     };
-    let inline_never : ast::Attribute = ast::Attribute {
+    let inline_never: ast::Attribute = ast::Attribute {
         kind: ast::AttrKind::Normal(inline_never_attr),
         //id: ast::DUMMY_TR_ID,
         id: ast::AttrId::from_u32(12342), // TODO: fix
@@ -241,7 +248,7 @@ pub fn expand(
                 iitem.attrs.push(inline_never.clone());
             }
             Annotatable::Item(iitem.clone())
-        },
+        }
         Annotatable::AssocItem(ref mut assoc_item, i @ AssocCtxt::Impl) => {
             if !assoc_item.attrs.iter().any(|a| a.id == attr.id) {
                 assoc_item.attrs.push(attr.clone());
@@ -250,7 +257,7 @@ pub fn expand(
                 assoc_item.attrs.push(inline_never.clone());
             }
             Annotatable::AssocItem(assoc_item.clone(), i)
-        },
+        }
         _ => {
             panic!("not supported");
         }
@@ -277,7 +284,8 @@ pub fn expand(
         });
         Annotatable::AssocItem(d_fn, AssocCtxt::Impl)
     } else {
-        let mut d_fn = ecx.item(span, d_ident, thin_vec![attr.clone(), inline_never], ItemKind::Fn(asdf));
+        let mut d_fn =
+            ecx.item(span, d_ident, thin_vec![attr.clone(), inline_never], ItemKind::Fn(asdf));
         d_fn.vis = vis;
         Annotatable::Item(d_fn)
     };
@@ -302,7 +310,6 @@ fn assure_mut_ref(ty: &ast::Ty) -> ast::Ty {
     }
     ty
 }
-
 
 // The body of our generated functions will consist of two black_Box calls.
 // The first will call the primal function with the original arguments.
@@ -365,7 +372,6 @@ fn gen_enzyme_body(
     body.stmts.push(ecx.stmt_semi(black_box_primal_call.clone()));
     body.stmts.push(ecx.stmt_semi(black_box_remaining_args));
 
-
     if !d_sig.decl.output.has_ret() {
         // there is no return type that we have to match, () works fine.
         return body;
@@ -398,7 +404,7 @@ fn gen_enzyme_body(
         return body;
     }
 
-    let mut exprs = ThinVec::<P::<ast::Expr>>::new();
+    let mut exprs = ThinVec::<P<ast::Expr>>::new();
     if primal_ret {
         // We have both primal ret and active floats.
         // primal ret is first, by construction.
@@ -414,9 +420,7 @@ fn gen_enzyme_body(
         }
     };
     let mut d_ret_ty = match d_ret_ty.kind.clone() {
-        TyKind::Tup(ref tys) => {
-            tys.clone()
-        }
+        TyKind::Tup(ref tys) => tys.clone(),
         TyKind::Path(_, rustc_ast::Path { segments, .. }) => {
             if segments.len() == 1 && segments[0].args.is_none() {
                 let id = vec![segments[0].ident];
@@ -460,10 +464,10 @@ fn gen_enzyme_body(
             let default_call_expr = ecx.expr_path(ecx.path(span, tmp));
             let default_call_expr = ecx.expr_call(new_decl_span, default_call_expr, thin_vec![]);
             exprs.push(default_call_expr);
-        };
+        }
     }
 
-    let ret : P<ast::Expr>;
+    let ret: P<ast::Expr>;
     if exprs.len() > 1 {
         let ret_tuple: P<ast::Expr> = ecx.expr_tuple(span, exprs);
         ret = ecx.expr_call(new_decl_span, blackbox_call_expr.clone(), thin_vec![ret_tuple]);
@@ -490,11 +494,13 @@ fn gen_primal_call(
 ) -> P<ast::Expr> {
     let has_self = idents.len() > 0 && idents[0].name == kw::SelfLower;
     if has_self {
-        let args: ThinVec<_> = idents[1..].iter().map(|arg| ecx.expr_path(ecx.path_ident(span, *arg))).collect();
+        let args: ThinVec<_> =
+            idents[1..].iter().map(|arg| ecx.expr_path(ecx.path_ident(span, *arg))).collect();
         let self_expr = ecx.expr_self(span);
         ecx.expr_method_call(span, self_expr, primal, args.clone())
     } else {
-        let args: ThinVec<_> = idents.iter().map(|arg| ecx.expr_path(ecx.path_ident(span, *arg))).collect();
+        let args: ThinVec<_> =
+            idents.iter().map(|arg| ecx.expr_path(ecx.path_ident(span, *arg))).collect();
         let primal_call_expr = ecx.expr_path(ecx.path_ident(span, primal));
         ecx.expr_call(span, primal_call_expr, args)
     }
@@ -537,13 +543,13 @@ fn gen_enzyme_decl(
             ecx.sess.dcx().emit_err(errors::AutoDiffInvalidApplicationModeAct {
                 span,
                 mode: x.mode.to_string(),
-                act: activity.to_string()
+                act: activity.to_string(),
             });
         }
         if !valid_ty_for_activity(&arg.ty, *activity) {
             ecx.sess.dcx().emit_err(errors::AutoDiffInvalidTypeForActivity {
                 span: arg.ty.span,
-                act: activity.to_string()
+                act: activity.to_string(),
             });
         }
         match activity {
@@ -668,11 +674,7 @@ fn gen_enzyme_decl(
     }
 
     // If we use ActiveOnly, drop the original return value.
-    d_decl.output = if active_only_ret {
-        FnRetTy::Default(span)
-    } else {
-        d_decl.output.clone()
-    };
+    d_decl.output = if active_only_ret { FnRetTy::Default(span) } else { d_decl.output.clone() };
 
     trace!("act_ret: {:?}", act_ret);
 

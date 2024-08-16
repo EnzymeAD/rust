@@ -111,7 +111,6 @@ impl<G: EmissionGuarantee> Diagnostic<'_, G> for TargetFeatureDisableOrEnable<'_
     }
 }
 
-
 #[derive(Diagnostic)]
 #[diag(codegen_llvm_autodiff_without_lto)]
 #[note]

@@ -1,12 +1,10 @@
-use crate::expand::typetree::TypeTree;
-use std::str::FromStr;
 use std::fmt::{self, Display, Formatter};
+use std::str::FromStr;
+
+use crate::expand::typetree::TypeTree;
+use crate::expand::{Decodable, Encodable, HashStable_Generic};
 use crate::ptr::P;
 use crate::{Ty, TyKind};
-
-use crate::expand::HashStable_Generic;
-use crate::expand::Encodable;
-use crate::expand::Decodable;
 
 #[derive(Clone, Copy, Eq, PartialEq, Encodable, Decodable, Debug, HashStable_Generic)]
 pub enum DiffMode {
@@ -53,14 +51,14 @@ pub fn valid_ret_activity(mode: DiffMode, activity: DiffActivity) -> bool {
         DiffMode::Inactive => false,
         DiffMode::Source => false,
         DiffMode::Forward | DiffMode::ForwardFirst => {
-            activity == DiffActivity::Dual ||
-                activity == DiffActivity::DualOnly ||
-                activity == DiffActivity::Const
+            activity == DiffActivity::Dual
+                || activity == DiffActivity::DualOnly
+                || activity == DiffActivity::Const
         }
         DiffMode::Reverse | DiffMode::ReverseFirst => {
-            activity == DiffActivity::Const ||
-                activity == DiffActivity::Active ||
-                activity == DiffActivity::ActiveOnly
+            activity == DiffActivity::Const
+                || activity == DiffActivity::Active
+                || activity == DiffActivity::ActiveOnly
         }
     }
 }
@@ -77,11 +75,11 @@ fn is_ptr_or_ref(ty: &Ty) -> bool {
 //}
 pub fn valid_ty_for_activity(ty: &P<Ty>, activity: DiffActivity) -> bool {
     if is_ptr_or_ref(ty) {
-        return activity == DiffActivity::Dual ||
-            activity == DiffActivity::DualOnly ||
-            activity == DiffActivity::Duplicated ||
-            activity == DiffActivity::DuplicatedOnly ||
-            activity == DiffActivity::Const;
+        return activity == DiffActivity::Dual
+            || activity == DiffActivity::DualOnly
+            || activity == DiffActivity::Duplicated
+            || activity == DiffActivity::DuplicatedOnly
+            || activity == DiffActivity::Const;
     }
     true
     //if is_scalar_ty(&ty) {
@@ -90,24 +88,24 @@ pub fn valid_ty_for_activity(ty: &P<Ty>, activity: DiffActivity) -> bool {
     //}
 }
 pub fn valid_input_activity(mode: DiffMode, activity: DiffActivity) -> bool {
-        return match mode {
-            DiffMode::Inactive => false,
-            DiffMode::Source => false,
-            DiffMode::Forward | DiffMode::ForwardFirst => {
-                // These are the only valid cases
-                activity == DiffActivity::Dual ||
-                    activity == DiffActivity::DualOnly ||
-                    activity == DiffActivity::Const
-            }
-            DiffMode::Reverse | DiffMode::ReverseFirst => {
-                // These are the only valid cases
-                activity == DiffActivity::Active ||
-                    activity == DiffActivity::ActiveOnly ||
-                    activity == DiffActivity::Const ||
-                    activity == DiffActivity::Duplicated ||
-                    activity == DiffActivity::DuplicatedOnly
-            }
-        };
+    return match mode {
+        DiffMode::Inactive => false,
+        DiffMode::Source => false,
+        DiffMode::Forward | DiffMode::ForwardFirst => {
+            // These are the only valid cases
+            activity == DiffActivity::Dual
+                || activity == DiffActivity::DualOnly
+                || activity == DiffActivity::Const
+        }
+        DiffMode::Reverse | DiffMode::ReverseFirst => {
+            // These are the only valid cases
+            activity == DiffActivity::Active
+                || activity == DiffActivity::ActiveOnly
+                || activity == DiffActivity::Const
+                || activity == DiffActivity::Duplicated
+                || activity == DiffActivity::DuplicatedOnly
+        }
+    };
 }
 pub fn invalid_input_activities(mode: DiffMode, activity_vec: &[DiffActivity]) -> Option<usize> {
     for i in 0..activity_vec.len() {
@@ -129,7 +127,7 @@ pub enum DiffActivity {
     DualOnly,
     Duplicated,
     DuplicatedOnly,
-    FakeActivitySize
+    FakeActivitySize,
 }
 
 impl Display for DiffActivity {
@@ -223,9 +221,7 @@ impl AutoDiffAttrs {
     pub fn is_active(&self) -> bool {
         match self.mode {
             DiffMode::Inactive => false,
-            _ => {
-                true
-            }
+            _ => true,
         }
     }
 
@@ -239,9 +235,7 @@ impl AutoDiffAttrs {
         match self.mode {
             DiffMode::Inactive => false,
             DiffMode::Source => false,
-            _ => {
-                true
-            }
+            _ => true,
         }
     }
 

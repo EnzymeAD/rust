@@ -62,10 +62,7 @@ impl OverlayKind {
                 "src/tools/rust-analyzer/LICENSE-APACHE",
                 "src/tools/rust-analyzer/LICENSE-MIT",
             ],
-            OverlayKind::Enzyme => &[
-                "src/tools/enzyme/README.md",
-                "src/tools/enzyme/LICENSE",
-            ],
+            OverlayKind::Enzyme => &["src/tools/enzyme/README.md", "src/tools/enzyme/LICENSE"],
             OverlayKind::RustcCodegenCranelift => &[
                 "compiler/rustc_codegen_cranelift/Readme.md",
                 "compiler/rustc_codegen_cranelift/LICENSE-APACHE",
