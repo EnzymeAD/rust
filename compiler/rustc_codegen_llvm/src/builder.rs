@@ -87,9 +87,6 @@ pub fn add_tt2<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context, fn_def: 
 
 #[allow(unused)]
 pub fn add_opt_dbg_helper<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context, val: &'ll Value, attrs: AutoDiffAttrs, i: usize) {
-    //pub mode: DiffMode,
-    //pub ret_activity: DiffActivity,
-    //pub input_activity: Vec<DiffActivity>,
     let inputs = attrs.input_activity;
     let outputs = attrs.ret_activity;
     let ad_name = match attrs.mode {
@@ -136,7 +133,6 @@ pub fn add_opt_dbg_helper<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Contex
         let num_args = llvm::LLVMCountParams(wrapper_fn);
         let mut args = Vec::with_capacity(num_args as usize + 1);
         args.push(val);
-        // metadata !"enzyme_const"
         let enzyme_const = llvm::LLVMMDStringInContext(llcx, "enzyme_const".as_ptr() as *const c_char, 12);
         let enzyme_out = llvm::LLVMMDStringInContext(llcx, "enzyme_out".as_ptr() as *const c_char, 10);
         let enzyme_dup = llvm::LLVMMDStringInContext(llcx, "enzyme_dup".as_ptr() as *const c_char, 10);
