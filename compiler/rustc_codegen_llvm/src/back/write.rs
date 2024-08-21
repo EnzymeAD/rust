@@ -1069,6 +1069,12 @@ pub(crate) unsafe fn enzyme_ad(
             _ => unreachable!(),
         };
         let mut res: &Value = tmp.0;
+        // res is getting wrapped, but we don't want the perf overhead of a fnc call indirection.
+        // So we'll add an alwaysinline attribute to let llvm handle it for us.
+        let always_inline = llvm::AttributeKind::AlwaysInline;
+        let attr = llvm::LLVMRustCreateAttrNoValue(llcx, always_inline);
+        llvm::LLVMRustAddFunctionAttributes(res, 9, &attr, 1);
+
         let size_positions: Vec<usize> = tmp.1;
 
         let f_return_type = LLVMGetReturnType(LLVMGlobalGetValueType(res));
