@@ -49,5 +49,5 @@
 	shallow = true
 [submodule "src/tools/enzyme"]
 	path = src/tools/enzyme
-	url = git@github.com:EnzymeAD/Enzyme.git
+	url = https://github.com/EnzymeAD/Enzyme.git
 	shallow = true
