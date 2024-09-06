@@ -2453,3 +2453,4 @@ unsafe extern "C" {
 
     pub fn LLVMRustIsECObject(buf_ptr: *const u8, buf_len: usize) -> bool;
 }
+
