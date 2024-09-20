@@ -58,7 +58,7 @@ impl LlvmBuildStatus {
 
 /// Linker flags to pass to LLVM's CMake invocation.
 #[derive(Debug, Clone, Default)]
-struct LdFlags {
+pub(crate) struct LdFlags {
     /// CMAKE_EXE_LINKER_FLAGS
     exe: OsString,
     /// CMAKE_SHARED_LINKER_FLAGS
@@ -587,7 +587,7 @@ fn check_llvm_version(builder: &Builder<'_>, llvm_config: &Path) {
     panic!("\n\nbad LLVM version: {version}, need >=17.0\n\n")
 }
 
-fn configure_cmake(
+pub(crate) fn configure_cmake(
     builder: &Builder<'_>,
     target: TargetSelection,
     cfg: &mut cmake::Config,
@@ -1242,17 +1242,17 @@ fn supported_sanitizers(
     }
 }
 
-struct HashStamp {
-    path: PathBuf,
-    hash: Option<Vec<u8>>,
+pub(crate) struct HashStamp {
+    pub(crate) path: PathBuf,
+    pub(crate) hash: Option<Vec<u8>>,
 }
 
 impl HashStamp {
-    fn new(path: PathBuf, hash: Option<&str>) -> Self {
+    pub(crate) fn new(path: PathBuf, hash: Option<&str>) -> Self {
         HashStamp { path, hash: hash.map(|s| s.as_bytes().to_owned()) }
     }
 
-    fn is_done(&self) -> bool {
+    pub(crate) fn is_done(&self) -> bool {
         match fs::read(&self.path) {
             Ok(h) => self.hash.as_deref().unwrap_or(b"") == h.as_slice(),
             Err(e) if e.kind() == io::ErrorKind::NotFound => false,
@@ -1262,7 +1262,7 @@ impl HashStamp {
         }
     }
 
-    fn remove(&self) -> io::Result<()> {
+    pub(crate) fn remove(&self) -> io::Result<()> {
         match fs::remove_file(&self.path) {
             Ok(()) => Ok(()),
             Err(e) => {
@@ -1275,7 +1275,7 @@ impl HashStamp {
         }
     }
 
-    fn write(&self) -> io::Result<()> {
+    pub(crate) fn write(&self) -> io::Result<()> {
         fs::write(&self.path, self.hash.as_deref().unwrap_or(b""))
     }
 }

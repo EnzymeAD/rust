@@ -13,6 +13,7 @@ use std::ffi::OsStr;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
+use std::sync::OnceLock;
 
 use object::read::archive::ArchiveFile;
 use object::BinaryFormat;
@@ -2095,6 +2096,130 @@ pub fn maybe_install_llvm_runtime(builder: &Builder<'_>, target: TargetSelection
     }
 }
 
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub struct Enzyme {
+    pub target: TargetSelection,
+}
+
+impl Step for Enzyme {
+    //type Output = Option<GeneratedTarball>;
+    type Output = PathBuf;
+    const ONLY_HOSTS: bool = true;
+
+    fn should_run(run: ShouldRun<'_>) -> ShouldRun<'_> {
+        run.path("src/tools/enzyme/enzyme")
+        //if run.builder.config.llvm_enzyme {
+        //    run.path("src/tools/enzyme/enzyme")
+        //} else {
+        //    run.never()
+        //}
+    }
+
+    fn make_run(run: RunConfig<'_>) {
+        run.builder.ensure(Enzyme { target: run.target });
+    }
+
+    /// Compile Enzyme for `target`.
+    fn run(self, builder: &Builder<'_>) -> PathBuf {
+        builder.require_submodule(
+            "src/tools/enzyme",
+            Some("The Enzyme sources are required for autodiff."),
+        );
+        if builder.config.dry_run() {
+            let out_dir = builder.enzyme_out(self.target);
+            return out_dir;
+        }
+        let target = self.target;
+        let llvm::LlvmResult { llvm_config, .. } = builder.ensure(llvm::Llvm { target });
+
+        static STAMP_HASH_MEMO: OnceLock<String> = OnceLock::new();
+        let smart_stamp_hash = STAMP_HASH_MEMO.get_or_init(|| {
+            crate::generate_smart_stamp_hash(
+                builder,
+                &builder.config.src.join("src/tools/enzyme"),
+                builder.enzyme_info.sha().unwrap_or_default(),
+            )
+        });
+
+        let out_dir = builder.enzyme_out(target);
+        let stamp = out_dir.join("enzyme-finished-building");
+        let stamp = llvm::HashStamp::new(stamp, Some(smart_stamp_hash));
+
+        if stamp.is_done() {
+            if stamp.hash.is_none() {
+                builder.info(
+                    "Could not determine the Enzyme submodule commit hash. \
+                     Assuming that an Enzyme rebuild is not necessary.",
+                );
+                builder.info(&format!(
+                    "To force Enzyme to rebuild, remove the file `{}`",
+                    stamp.path.display()
+                ));
+            }
+            return out_dir;
+        }
+
+        builder.info(&format!("Building Enzyme for {}", target));
+        t!(stamp.remove());
+        let _time = crate::helpers::timeit(builder);
+        t!(fs::create_dir_all(&out_dir));
+
+        builder
+            .config
+            .update_submodule(Path::new("src").join("tools").join("enzyme").to_str().unwrap());
+        let mut cfg = cmake::Config::new(builder.src.join("src/tools/enzyme/enzyme/"));
+        // FIXME(ZuseZ4): Find a nicer way to use Enzyme Debug builds
+        //cfg.profile("Debug");
+        //cfg.define("CMAKE_BUILD_TYPE", "Debug");
+        llvm::configure_cmake(builder, target, &mut cfg, true, llvm::LdFlags::default(), &[]);
+
+        // Re-use the same flags as llvm to control the level of debug information
+        // generated for lld.
+        let profile = match (builder.config.llvm_optimize, builder.config.llvm_release_debuginfo) {
+            (false, _) => "Debug",
+            (true, false) => "Release",
+            (true, true) => "RelWithDebInfo",
+        };
+
+        cfg.out_dir(&out_dir)
+            .profile(profile)
+            .env("LLVM_CONFIG_REAL", &llvm_config)
+            .define("LLVM_ENABLE_ASSERTIONS", "ON")
+            .define("ENZYME_EXTERNAL_SHARED_LIB", "ON")
+            .define("LLVM_DIR", builder.llvm_out(target));
+
+        cfg.build();
+
+        t!(stamp.write());
+        out_dir
+        ////builder.ensure(llvm::Llvm { target });
+
+        //let mut tarball = Tarball::new(builder, "enzyme", &target.triple);
+        //tarball.set_overlay(OverlayKind::Llvm);
+        //tarball.is_preview(true);
+
+        ////~/prog/Enzyme/enzyme/buildrust/Enzyme/LLVMEnzyme-19.so
+        //if builder.config.llvm_tools_enabled {
+        //    // Prepare the image directory
+        //    let src_bindir = builder.llvm_out(target).join("bin");
+        //    let dst_bindir = format!("lib/rustlib/{}/bin", target.triple);
+        //    for tool in tools_to_install(&builder.paths) {
+        //        let exe = src_bindir.join(exe(tool, target));
+        //        tarball.add_file(&exe, &dst_bindir, 0o755);
+        //    }
+        //}
+
+        //// Copy libLLVM.so to the target lib dir as well, so the RPATH like
+        //// `$ORIGIN/../lib` can find it. It may also be used as a dependency
+        //// of `rustc-dev` to support the inherited `-lLLVM` when using the
+        //// compiler libraries.
+        //maybe_install_llvm_target(builder, target, tarball.image_dir());
+
+        //Some(tarball.generate())
+    }
+}
+
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct LlvmTools {
     pub target: TargetSelection,
@@ -2157,7 +2282,7 @@ impl Step for LlvmTools {
             }
         }
 
-        builder.ensure(crate::core::build_steps::llvm::Llvm { target });
+        builder.ensure(llvm::Llvm { target });
 
         let mut tarball = Tarball::new(builder, "llvm-tools", &target.triple);
         tarball.set_overlay(OverlayKind::Llvm);

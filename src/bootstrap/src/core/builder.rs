@@ -1,3 +1,4 @@
+#![allow(unexpected_cfgs)]
 use std::any::{type_name, Any};
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
@@ -963,6 +964,7 @@ impl<'a> Builder<'a> {
                 dist::Miri,
                 dist::LlvmTools,
                 dist::LlvmBitcodeLinker,
+                dist::Enzyme,
                 dist::RustDev,
                 dist::Bootstrap,
                 dist::Extended,
@@ -976,6 +978,7 @@ impl<'a> Builder<'a> {
             ),
             Kind::Install => describe!(
                 install::Docs,
+                install::Enzyme,
                 install::Std,
                 // During the Rust compiler (rustc) installation process, we copy the entire sysroot binary
                 // path (build/host/stage2/bin). Since the building tools also make their copy in the sysroot
@@ -1590,6 +1593,7 @@ impl<'a> Builder<'a> {
         }
 
         // https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/.E2.9C.94.20link.20new.20library.20into.20stage1.2Frustc
+        #[cfg(not(bootstrap))]
         if self.config.llvm_enzyme {
             rustflags.arg("-l");
             rustflags.arg("Enzyme-19");
