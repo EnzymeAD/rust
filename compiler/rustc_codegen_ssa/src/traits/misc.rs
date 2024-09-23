@@ -28,4 +28,6 @@ pub trait MiscCodegenMethods<'tcx>: BackendTypes {
     /// Declares the extern "C" main function for the entry point. Returns None if the symbol
     /// already exists.
     fn declare_c_main(&self, fn_type: Self::Type) -> Option<Self::Function>;
+    // TODO: Manuel: I think we can drop this and construct the empty vec on the fly?
+    fn create_autodiff(&self) -> Vec<Self::Function>;
 }
