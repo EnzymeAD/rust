@@ -48,7 +48,7 @@ pub use rustc_session::lint::RegisteredTools;
 use rustc_span::hygiene::MacroKind;
 use rustc_span::symbol::{Ident, Symbol, kw, sym};
 use rustc_span::{ExpnId, ExpnKind, Span};
-use rustc_target::abi::{Align, FieldIdx, Integer, IntegerType, VariantIdx};
+use rustc_target::abi::{Align, FieldIdx, FieldsShape, Integer, IntegerType, VariantIdx};
 pub use rustc_target::abi::{ReprFlags, ReprOptions};
 pub use rustc_type_ir::ConstKind::{
     Bound as BoundCt, Error as ErrorCt, Expr as ExprCt, Infer as InferCt, Param as ParamCt,
@@ -107,6 +107,7 @@ pub use self::typeck_results::{
     CanonicalUserType, CanonicalUserTypeAnnotation, CanonicalUserTypeAnnotations, IsIdentity,
     TypeckResults, UserType, UserTypeAnnotationIndex,
 };
+pub use self::typetree::*;
 pub use self::visit::{TypeSuperVisitable, TypeVisitable, TypeVisitableExt, TypeVisitor};
 use crate::error::{OpaqueHiddenTypeMismatch, TypeMismatchReason};
 use crate::metadata::ModChild;
@@ -134,6 +135,7 @@ pub mod pattern;
 pub mod print;
 pub mod relate;
 pub mod trait_def;
+pub mod typetree;
 pub mod util;
 pub mod visit;
 pub mod vtable;
@@ -212,6 +214,9 @@ pub struct ResolverAstLowering {
     pub extra_lifetime_params_map: NodeMap<Vec<(Ident, ast::NodeId, LifetimeRes)>>,
 
     pub next_node_id: ast::NodeId,
+
+    /// Mapping of autodiff function IDs
+    pub autodiff_map: FxHashMap<LocalDefId, LocalDefId>,
 
     pub node_id_to_def_id: NodeMap<LocalDefId>,
 
