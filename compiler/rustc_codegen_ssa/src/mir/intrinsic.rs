@@ -2,7 +2,7 @@ use rustc_ast::expand::typetree::{FncTree, TypeTree};
 use rustc_middle::ty::layout::HasTyCtxt;
 use rustc_middle::ty::{self, Ty, TyCtxt, typetree_from};
 use rustc_middle::{bug, span_bug};
-use rustc_session::config::OptLevel;
+use rustc_session::config::{AutoDiff, OptLevel};
 use rustc_span::{Span, sym};
 use rustc_target::abi::WrappingRange;
 use rustc_target::abi::call::{FnAbi, PassMode};
@@ -26,8 +26,15 @@ fn copy_intrinsic<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
 ) {
     let tcx: TyCtxt<'_> = bx.cx().tcx();
     let tt: TypeTree = typetree_from(tcx, ty);
-    let fnc_tree: FncTree =
-        FncTree { args: vec![tt.clone(), tt.clone(), TypeTree::all_ints()], ret: TypeTree::new() };
+    let ad = &tcx.sess.opts.unstable_opts.autodiff;
+    let fnc_tree: Option<FncTree> = if ad.contains(&AutoDiff::NoTypeTrees) {
+        None
+    } else {
+        Some(FncTree {
+            args: vec![tt.clone(), tt.clone(), TypeTree::all_ints()],
+            ret: TypeTree::new(),
+        })
+    };
 
     let layout = bx.layout_of(ty);
     let size = layout.size;
@@ -36,9 +43,9 @@ fn copy_intrinsic<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
     let flags = if volatile { MemFlags::VOLATILE } else { MemFlags::empty() };
     trace!("copy: mir ty: {:?}, enzyme tt: {:?}", ty, fnc_tree);
     if allow_overlap {
-        bx.memmove(dst, align, src, align, size, flags, Some(fnc_tree));
+        bx.memmove(dst, align, src, align, size, flags, fnc_tree);
     } else {
-        bx.memcpy(dst, align, src, align, size, flags, Some(fnc_tree));
+        bx.memcpy(dst, align, src, align, size, flags, fnc_tree);
     }
 }
 
@@ -52,15 +59,22 @@ fn memset_intrinsic<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
 ) {
     let tcx: TyCtxt<'_> = bx.cx().tcx();
     let tt: TypeTree = typetree_from(tcx, ty);
-    let fnc_tree: FncTree =
-        FncTree { args: vec![tt.clone(), tt.clone(), TypeTree::all_ints()], ret: TypeTree::new() };
+    let ad = &tcx.sess.opts.unstable_opts.autodiff;
+    let fnc_tree: Option<FncTree> = if ad.contains(&AutoDiff::NoTypeTrees) {
+        None
+    } else {
+        Some(FncTree {
+            args: vec![tt.clone(), tt.clone(), TypeTree::all_ints()],
+            ret: TypeTree::new(),
+        })
+    };
 
     let layout = bx.layout_of(ty);
     let size = layout.size;
     let align = layout.align.abi;
     let size = bx.mul(bx.const_usize(size.bytes()), count);
     let flags = if volatile { MemFlags::VOLATILE } else { MemFlags::empty() };
-    bx.memset(dst, val, size, align, flags, Some(fnc_tree));
+    bx.memset(dst, val, size, align, flags, fnc_tree);
 }
 
 impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {

@@ -1,9 +1,9 @@
 use std::str::FromStr;
 
 use rustc_ast::expand::autodiff_attrs::{
-    AutoDiffAttrs, DiffActivity, DiffMode, valid_ret_activity, valid_input_activity,
+    AutoDiffAttrs, DiffActivity, DiffMode, valid_input_activity, valid_ret_activity,
 };
-use rustc_ast::{MetaItemInner, MetaItem, MetaItemKind, ast, attr};
+use rustc_ast::{MetaItem, MetaItemInner, MetaItemKind, ast, attr};
 use rustc_attr::{InlineAttr, InstructionSetAttr, OptimizeAttr, list_contains_name};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::codes::*;
@@ -807,7 +807,7 @@ fn autodiff_attrs(tcx: TyCtxt<'_>, id: DefId) -> AutoDiffAttrs {
             attrs.get(0).unwrap()
             //tcx.dcx().struct_span_err(attrs[1].span, msg_once).with_note("more than one").emit();
             //return AutoDiffAttrs::error();
-        },
+        }
     };
 
     let list = attr.meta_item_list().unwrap_or_default();

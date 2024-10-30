@@ -160,6 +160,9 @@ pub struct Session {
     /// Data about code being compiled, gathered during compilation.
     pub code_stats: CodeStats,
 
+    /// Tracks if `-Z autodiff="NoTypeTrees"` is specified.
+    pub emit_type_trees: bool,
+
     /// Tracks fuel info if `-zfuel=crate=n` is specified.
     optimization_fuel: Lock<OptimizationFuel>,
 
@@ -1090,6 +1093,9 @@ pub fn build_session(
     });
     let print_fuel = AtomicU64::new(0);
 
+    let emit_type_trees =
+        !sopts.unstable_opts.autodiff.contains(&crate::config::AutoDiff::NoTypeTrees);
+
     let prof = SelfProfilerRef::new(
         self_profiler,
         sopts.unstable_opts.time_passes.then(|| sopts.unstable_opts.time_passes_format),
@@ -1115,6 +1121,7 @@ pub fn build_session(
         incr_comp_session: RwLock::new(IncrCompSession::NotInitialized),
         prof,
         code_stats: Default::default(),
+        emit_type_trees,
         optimization_fuel,
         print_fuel,
         jobserver: jobserver::client(),

@@ -1014,6 +1014,7 @@ mod parse {
                 "PrintModAfterOpts" => AutoDiff::PrintModAfterOpts,
                 "PrintModAfterEnzyme" => AutoDiff::PrintModAfterEnzyme,
                 "LooseTypes" => AutoDiff::LooseTypes,
+                "NoTypeTree" => AutoDiff::NoTypeTrees,
                 "OPT" => AutoDiff::OPT,
                 "NoModOptAfter" => AutoDiff::NoModOptAfter,
                 "EnableFncOpt" => AutoDiff::EnableFncOpt,

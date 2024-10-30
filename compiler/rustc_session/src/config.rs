@@ -221,6 +221,7 @@ pub enum AutoDiff {
     /// TypeTree options
     /// TODO: Figure out how to let users construct these,
     /// or whether we want to leave this option in the first place.
+    NoTypeTrees,
     TTWidth(u64),
     TTDepth(u64),
 

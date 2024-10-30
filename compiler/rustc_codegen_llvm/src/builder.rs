@@ -32,12 +32,11 @@ use crate::abi::FnAbiLlvmExt;
 use crate::attributes;
 use crate::common::Funclet;
 use crate::context::CodegenCx;
-use crate::llvm::{self, AtomicOrdering, AtomicRmwBinOp, BasicBlock, False, True};
+use crate::llvm::{self, AtomicOrdering, AtomicRmwBinOp, BasicBlock, False, Metadata, True};
 use crate::type_::Type;
 use crate::type_of::LayoutLlvmExt;
 use crate::typetree::to_enzyme_typetree;
 use crate::value::Value;
-use crate::llvm::Metadata;
 
 pub(crate) fn add_tt2<'ll>(
     llmod: &'ll llvm::Module,

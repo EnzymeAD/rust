@@ -120,8 +120,8 @@ use rustc_middle::util::Providers;
 use rustc_session::CodegenUnits;
 use rustc_session::config::{DumpMonoStatsFormat, SwitchWithOptPath};
 use rustc_span::symbol::Symbol;
-use rustc_target::spec::SymbolVisibility;
 use rustc_symbol_mangling::symbol_name_for_instance_in_crate;
+use rustc_target::spec::SymbolVisibility;
 use tracing::{debug, trace};
 
 use crate::collector::{self, MonoItemCollectionStrategy, UsageMap};

@@ -1113,7 +1113,9 @@ pub(crate) unsafe fn differentiate(
         let name = CString::new(item.source.clone()).unwrap();
         let fn_def: &llvm::Value =
             unsafe { llvm::LLVMGetNamedFunction(llmod, name.as_ptr()).unwrap() };
-        crate::builder::add_tt2(llmod, llcx, fn_def, tt);
+        if !ad.contains(&AutoDiff::NoTypeTrees) {
+            crate::builder::add_tt2(llmod, llcx, fn_def, tt);
+        }
 
         // Before dumping the module, we also might want to add dummy functions,  which will
         // trigger the LLVMEnzyme pass to run on them, if we invoke the opt binary.
