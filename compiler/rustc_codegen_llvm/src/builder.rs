@@ -114,7 +114,6 @@ pub(crate) fn add_opt_dbg_helper2<'ll>(
     //   ret double %0
     // }
 
-    let mut final_num_args;
     unsafe {
         let fn_ty = llvm::LLVMRustGetFunctionType(tgt);
         let ret_ty = llvm::LLVMGetReturnType(fn_ty);
@@ -156,13 +155,10 @@ pub(crate) fn add_opt_dbg_helper2<'ll>(
             llvm::LLVMMDStringInContext2(llcx, "enzyme_dupnoneed".as_ptr() as *const c_char, 16);
         let enzyme_primal_ret =
             llvm::LLVMMDStringInContext2(llcx, "enzyme_primal_return".as_ptr() as *const c_char, 20);
-        final_num_args = num_args * 2 + 1;
+        // Two per arg, since we have (metadata, arg). +1 for the ptr to the primal function.
+        let mut final_num_args = num_args * 2 + 1;
 
         match output {
-            DiffActivity::Duplicated => {
-                args.push(llvm::LLVMMetadataAsValue(llcx, enzyme_primal_ret));
-                final_num_args += 1;
-            },
             DiffActivity::Dual => {
                 args.push(llvm::LLVMMetadataAsValue(llcx, enzyme_primal_ret));
                 final_num_args += 1;
