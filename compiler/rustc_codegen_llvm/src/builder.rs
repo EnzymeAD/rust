@@ -94,7 +94,6 @@ pub(crate) fn add_opt_dbg_helper2<'ll>(
     val: &'ll Value,
     tgt: &'ll Value,
     attrs: AutoDiffAttrs,
-    i: usize,
 ) {
     let inputs = attrs.input_activity;
     let output = attrs.ret_activity;
@@ -159,18 +158,26 @@ pub(crate) fn add_opt_dbg_helper2<'ll>(
             llvm::LLVMMDStringInContext2(llcx, "enzyme_primal_return".as_ptr() as *const c_char, 20);
         final_num_args = num_args * 2 + 1;
 
-        //match output {
-        //    DiffActivity::Duplicated => {
-        //        args.push(llvm::LLVMMetadataAsValue(llcx, enzyme_primal_ret));
-        //    },
-        //    DiffActivity::Dual => {
-        //        args.push(llvm::LLVMMetadataAsValue(llcx, enzyme_primal_ret));
-        //    },
-        //    _ => {},
-        //}
+        match output {
+            DiffActivity::Duplicated => {
+                args.push(llvm::LLVMMetadataAsValue(llcx, enzyme_primal_ret));
+                final_num_args += 1;
+            },
+            DiffActivity::Dual => {
+                args.push(llvm::LLVMMetadataAsValue(llcx, enzyme_primal_ret));
+                final_num_args += 1;
+            },
+            DiffActivity::Active => {
+                args.push(llvm::LLVMMetadataAsValue(llcx, enzyme_primal_ret));
+                final_num_args += 1;
+            },
+            _ => {},
+        }
 
+        let mut pos = 0;
         for i in 0..num_args {
-            let arg = llvm::LLVMGetParam(tgt, i);
+            let arg = llvm::LLVMGetParam(tgt, pos);
+            pos += 1;
             let activity = inputs[i as usize];
             let (activity, duplicated): (&Metadata, bool) = match activity {
                 DiffActivity::None => panic!(),
@@ -186,6 +193,8 @@ pub(crate) fn add_opt_dbg_helper2<'ll>(
             args.push(llvm::LLVMMetadataAsValue(llcx, activity));
             args.push(arg);
             if duplicated {
+                let arg = llvm::LLVMGetParam(tgt, pos);
+                pos += 1;
                 final_num_args += 1;
                 args.push(arg);
             }

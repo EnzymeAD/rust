@@ -1112,7 +1112,7 @@ pub(crate) fn differentiate(
     }
 
     // Before dumping the module, we want all the tt to become part of the module.
-    for (i, item) in diff_items.iter().enumerate() {
+    for item in diff_items.iter() {
         let tt: FncTree = FncTree { args: item.inputs.clone(), ret: item.output.clone() };
         let name = CString::new(item.source.clone()).unwrap();
         dbg!("Source name: {:?}", &name);
@@ -1120,8 +1120,16 @@ pub(crate) fn differentiate(
             unsafe { llvm::LLVMGetNamedFunction(llmod, name.as_ptr()).unwrap() };
         let tgt_name = CString::new(item.target.clone()).unwrap();
         dbg!("Target name: {:?}", &tgt_name);
-        let fn_target: &llvm::Value =
-            unsafe { llvm::LLVMGetNamedFunction(llmod, tgt_name.as_ptr()).unwrap() };
+        let fn_target: Option<&llvm::Value> =
+            unsafe { llvm::LLVMGetNamedFunction(llmod, tgt_name.as_ptr()) };
+        let fn_target = match fn_target {
+            Some(x) => x,
+            None => return Err(llvm_err(diag_handler.handle(), LlvmError::PrepareAutoDiff {
+                src: item.source.clone(),
+                target: item.target.clone(),
+                error: "could not find target function".to_owned(),
+            })),
+        };
         if !ad.contains(&AutoDiff::NoTypeTrees) {
             crate::builder::add_tt2(llmod, llcx, fn_def, tt);
         }
@@ -1138,7 +1146,6 @@ pub(crate) fn differentiate(
                 fn_def,
                 fn_target,
                 item.attrs.clone(),
-                i,
             );
         }
     }
