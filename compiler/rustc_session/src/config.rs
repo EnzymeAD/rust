@@ -218,6 +218,9 @@ pub enum AutoDiff {
     /// Output a Module using __enzyme calls to prepare it for opt + enzyme pass usage
     OPT,
 
+    /// Output a Module using __enzyme calls in the right location.
+    OPT2,
+
     /// TypeTree options
     /// TODO: Figure out how to let users construct these,
     /// or whether we want to leave this option in the first place.

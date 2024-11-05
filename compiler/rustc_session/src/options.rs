@@ -1016,6 +1016,7 @@ mod parse {
                 "LooseTypes" => AutoDiff::LooseTypes,
                 "NoTypeTree" => AutoDiff::NoTypeTrees,
                 "OPT" => AutoDiff::OPT,
+                "OPT2" => AutoDiff::OPT2,
                 "NoModOptAfter" => AutoDiff::NoModOptAfter,
                 "EnableFncOpt" => AutoDiff::EnableFncOpt,
                 "NoVecUnroll" => AutoDiff::NoVecUnroll,

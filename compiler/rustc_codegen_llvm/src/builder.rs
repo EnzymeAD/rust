@@ -88,15 +88,16 @@ pub(crate) fn add_tt2<'ll>(
 }
 
 #[allow(unused)]
-pub(crate) fn add_opt_dbg_helper<'ll>(
+pub(crate) fn add_opt_dbg_helper2<'ll>(
     llmod: &'ll llvm::Module,
     llcx: &'ll llvm::Context,
     val: &'ll Value,
+    tgt: &'ll Value,
     attrs: AutoDiffAttrs,
     i: usize,
 ) {
     let inputs = attrs.input_activity;
-    let outputs = attrs.ret_activity;
+    let output = attrs.ret_activity;
     let ad_name = match attrs.mode {
         DiffMode::Forward => "__enzyme_fwddiff",
         DiffMode::Reverse => "__enzyme_autodiff",
@@ -116,7 +117,7 @@ pub(crate) fn add_opt_dbg_helper<'ll>(
 
     let mut final_num_args;
     unsafe {
-        let fn_ty = llvm::LLVMRustGetFunctionType(val);
+        let fn_ty = llvm::LLVMRustGetFunctionType(tgt);
         let ret_ty = llvm::LLVMGetReturnType(fn_ty);
 
         // First we add the declaration of the __enzyme function
@@ -127,22 +128,23 @@ pub(crate) fn add_opt_dbg_helper<'ll>(
             ad_name.len().try_into().unwrap(),
             enzyme_ty,
         );
-
-        let wrapper_name = String::from("enzyme_opt_helper_") + i.to_string().as_str();
-        let wrapper_fn = llvm::LLVMRustGetOrInsertFunction(
-            llmod,
-            wrapper_name.as_ptr() as *const c_char,
-            wrapper_name.len().try_into().unwrap(),
-            fn_ty,
-        );
-        let entry = llvm::LLVMAppendBasicBlockInContext(
+        llvm::LLVMRustAddEnumAttributeAtIndex(
             llcx,
-            wrapper_fn,
-            "entry".as_ptr() as *const c_char,
+            ad_fn,
+            c_uint::MAX,
+            llvm::AttributeKind::NoInline,
         );
+
+        // first, remove all calls from fnc
+        let entry = llvm::LLVMGetFirstBasicBlock(tgt);
+        let br = llvm::LLVMRustGetTerminator(entry);
+        llvm::LLVMRustEraseInstFromParent(br);
+
         let builder = llvm::LLVMCreateBuilderInContext(llcx);
+        let last_inst = llvm::LLVMRustGetLastInstruction(entry).unwrap();
         llvm::LLVMPositionBuilderAtEnd(builder, entry);
-        let num_args = llvm::LLVMCountParams(wrapper_fn);
+
+        let num_args = llvm::LLVMCountParams(val);
         let mut args = Vec::with_capacity(num_args as usize + 1);
         args.push(val);
         let enzyme_const =
@@ -153,9 +155,22 @@ pub(crate) fn add_opt_dbg_helper<'ll>(
             llvm::LLVMMDStringInContext2(llcx, "enzyme_dup".as_ptr() as *const c_char, 10);
         let enzyme_dupnoneed =
             llvm::LLVMMDStringInContext2(llcx, "enzyme_dupnoneed".as_ptr() as *const c_char, 16);
+        let enzyme_primal_ret =
+            llvm::LLVMMDStringInContext2(llcx, "enzyme_primal_return".as_ptr() as *const c_char, 20);
         final_num_args = num_args * 2 + 1;
+
+        //match output {
+        //    DiffActivity::Duplicated => {
+        //        args.push(llvm::LLVMMetadataAsValue(llcx, enzyme_primal_ret));
+        //    },
+        //    DiffActivity::Dual => {
+        //        args.push(llvm::LLVMMetadataAsValue(llcx, enzyme_primal_ret));
+        //    },
+        //    _ => {},
+        //}
+
         for i in 0..num_args {
-            let arg = llvm::LLVMGetParam(wrapper_fn, i);
+            let arg = llvm::LLVMGetParam(tgt, i);
             let activity = inputs[i as usize];
             let (activity, duplicated): (&Metadata, bool) = match activity {
                 DiffActivity::None => panic!(),
@@ -191,46 +206,66 @@ pub(crate) fn add_opt_dbg_helper<'ll>(
             final_num_args as usize,
             ad_name.as_ptr() as *const c_char,
         );
+
+        // Add dummy dbg info to our newly generated call, if we have any.
+        //let md_ty = llvm::LLVMGetMDKindIDInContext(
+        //    llcx,
+        //    "dbg".as_ptr() as *const c_char,
+        //    "dbg".len() as c_uint,
+        //);
+
+        //if llvm::LLVMRustHasMetadata(last_inst, md_ty) {
+        //    let md = llvm::LLVMRustDIGetInstMetadata(last_inst);
+        //    let md_val = llvm::LLVMMetadataAsValue(llcx, md);
+        //    let _md2 = llvm::LLVMSetMetadata(call, md_ty, md_val);
+        //} else {
+        //    trace!("No dbg info");
+        //}
+        llvm::LLVMRustEraseInstBefore(entry, last_inst);
+
+
         let void_ty = llvm::LLVMVoidTypeInContext(llcx);
         if llvm::LLVMTypeOf(call) != void_ty {
             llvm::LLVMBuildRet(builder, call);
         } else {
             llvm::LLVMBuildRetVoid(builder);
-        }
+        };
         llvm::LLVMDisposeBuilder(builder);
 
-        let _fnc_ok = llvm::LLVMVerifyFunction(
-            wrapper_fn,
-            llvm::LLVMVerifierFailureAction::LLVMAbortProcessAction,
-        );
+        dbg!(&tgt);
+
+        let _fnc_ok =
+            llvm::LLVMVerifyFunction(tgt, llvm::LLVMVerifierFailureAction::LLVMAbortProcessAction);
+        let _fnc_ok =
+            llvm::LLVMVerifyFunction(val, llvm::LLVMVerifierFailureAction::LLVMAbortProcessAction);
     }
 }
 
 fn add_tt<'ll>(llmod: &'ll llvm::Module, llcx: &'ll llvm::Context, val: &'ll Value, tt: FncTree) {
-    let inputs = tt.args;
-    let _ret: TypeTree = tt.ret;
-    let llvm_data_layout: *const c_char = unsafe { llvm::LLVMGetDataLayoutStr(&*llmod) };
-    let llvm_data_layout =
-        std::str::from_utf8(unsafe { std::ffi::CStr::from_ptr(llvm_data_layout) }.to_bytes())
-            .expect("got a non-UTF8 data-layout from LLVM");
-    let attr_name = "enzyme_type";
-    let c_attr_name = std::ffi::CString::new(attr_name).unwrap();
-    for (i, &ref input) in inputs.iter().enumerate() {
-        let c_tt = to_enzyme_typetree(input.clone(), llvm_data_layout, llcx);
-        let c_str = unsafe { llvm::EnzymeTypeTreeToString(c_tt.inner) };
-        let c_str = unsafe { std::ffi::CStr::from_ptr(c_str) };
-        unsafe {
-            let attr = llvm::LLVMCreateStringAttribute(
-                llcx,
-                c_attr_name.as_ptr(),
-                c_attr_name.as_bytes().len() as c_uint,
-                c_str.as_ptr(),
-                c_str.to_bytes().len() as c_uint,
-            );
-            llvm::LLVMRustAddParamAttr(val, i as u32, attr);
-        }
-        unsafe { llvm::EnzymeTypeTreeToStringFree(c_str.as_ptr()) };
-    }
+    //let inputs = tt.args;
+    //let _ret: TypeTree = tt.ret;
+    //let llvm_data_layout: *const c_char = unsafe { llvm::LLVMGetDataLayoutStr(&*llmod) };
+    //let llvm_data_layout =
+    //    std::str::from_utf8(unsafe { std::ffi::CStr::from_ptr(llvm_data_layout) }.to_bytes())
+    //        .expect("got a non-UTF8 data-layout from LLVM");
+    //let attr_name = "enzyme_type";
+    //let c_attr_name = std::ffi::CString::new(attr_name).unwrap();
+    //for (i, &ref input) in inputs.iter().enumerate() {
+    //    let c_tt = to_enzyme_typetree(input.clone(), llvm_data_layout, llcx);
+    //    let c_str = unsafe { llvm::EnzymeTypeTreeToString(c_tt.inner) };
+    //    let c_str = unsafe { std::ffi::CStr::from_ptr(c_str) };
+    //    unsafe {
+    //        let attr = llvm::LLVMCreateStringAttribute(
+    //            llcx,
+    //            c_attr_name.as_ptr(),
+    //            c_attr_name.as_bytes().len() as c_uint,
+    //            c_str.as_ptr(),
+    //            c_str.to_bytes().len() as c_uint,
+    //        );
+    //        llvm::LLVMRustAddParamAttr(val, i as u32, attr);
+    //    }
+    //    unsafe { llvm::EnzymeTypeTreeToStringFree(c_str.as_ptr()) };
+    //}
 }
 
 // All Builders must have an llfn associated with them

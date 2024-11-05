@@ -616,6 +616,8 @@ pub(crate) unsafe fn llvm_optimize(
     let extra_passes = if !is_lto { config.passes.join(",") } else { "".to_string() };
 
     let llvm_plugins = config.llvm_plugins.join(",");
+    dbg!("llvm_plugins: {:?}", &llvm_plugins);
+    dbg!("extra_passes: {:?}", &extra_passes);
 
     let result = unsafe {
         llvm::LLVMRustOptimize(
@@ -679,7 +681,6 @@ fn get_params(fnc: &Value) -> Vec<&Value> {
 // second i64 from the mut slice isn't used? That's why we add a safety check to assert
 // that the second (mut) slice is at least as long as the first (const) slice. Otherwise,
 // Enzyme would write out of bounds if the first (const) slice is longer than the second.
-
 unsafe fn create_call<'a>(
     tgt: &'a Value,
     src: &'a Value,
@@ -690,6 +691,8 @@ unsafe fn create_call<'a>(
     _size_positions: &[usize],
     ad: &[AutoDiff],
 ) {
+    dbg!("Creating call");
+
     unsafe {
         // first, remove all calls from fnc
         let bb = LLVMGetFirstBasicBlock(tgt);
@@ -977,6 +980,7 @@ pub(crate) unsafe fn enzyme_ad(
     logic_ref: EnzymeLogicRef,
     ad: &[AutoDiff],
 ) -> Result<(), FatalError> {
+    dbg!("Enzyme AD");
     let autodiff_mode = item.attrs.mode;
     let rust_name = item.source;
     let rust_name2 = &item.target;
@@ -1083,7 +1087,7 @@ pub(crate) unsafe fn enzyme_ad(
     Ok(())
 }
 
-pub(crate) unsafe fn differentiate(
+pub(crate) fn differentiate(
     module: &ModuleCodegen<ModuleLlvm>,
     cgcx: &CodegenContext<LlvmCodegenBackend>,
     diff_items: Vec<AutoDiffItem>,
@@ -1098,7 +1102,7 @@ pub(crate) unsafe fn differentiate(
     let llcx = &module.module_llvm.llcx;
     let diag_handler = cgcx.create_dcx();
 
-    llvm::set_strict_aliasing(false);
+    //llvm::set_strict_aliasing(false);
 
     let ad = &config.autodiff;
 
@@ -1111,8 +1115,13 @@ pub(crate) unsafe fn differentiate(
     for (i, item) in diff_items.iter().enumerate() {
         let tt: FncTree = FncTree { args: item.inputs.clone(), ret: item.output.clone() };
         let name = CString::new(item.source.clone()).unwrap();
+        dbg!("Source name: {:?}", &name);
         let fn_def: &llvm::Value =
             unsafe { llvm::LLVMGetNamedFunction(llmod, name.as_ptr()).unwrap() };
+        let tgt_name = CString::new(item.target.clone()).unwrap();
+        dbg!("Target name: {:?}", &tgt_name);
+        let fn_target: &llvm::Value =
+            unsafe { llvm::LLVMGetNamedFunction(llmod, tgt_name.as_ptr()).unwrap() };
         if !ad.contains(&AutoDiff::NoTypeTrees) {
             crate::builder::add_tt2(llmod, llcx, fn_def, tt);
         }
@@ -1120,10 +1129,17 @@ pub(crate) unsafe fn differentiate(
         // Before dumping the module, we also might want to add dummy functions,  which will
         // trigger the LLVMEnzyme pass to run on them, if we invoke the opt binary.
         // This is super helpfull if we want to create a MWE bug reproducer, e.g. to run in
-        // Enzyme's compiler explorer. TODO: Can we run llvm-extract on the module to remove all other functions?
-        if ad.contains(&AutoDiff::OPT) {
+        // Enzyme's compiler explorer.
+        if ad.contains(&AutoDiff::OPT2) {
             dbg!("Enable extra debug helper to debug Enzyme through the opt plugin");
-            crate::builder::add_opt_dbg_helper(llmod, llcx, fn_def, item.attrs.clone(), i);
+            crate::builder::add_opt_dbg_helper2(
+                llmod,
+                llcx,
+                fn_def,
+                fn_target,
+                item.attrs.clone(),
+                i,
+            );
         }
     }
 
@@ -1158,42 +1174,7 @@ pub(crate) unsafe fn differentiate(
     }
 
     let differentiate = !diff_items.is_empty();
-    let mut first_order_items: Vec<AutoDiffItem> = vec![];
-    let mut higher_order_items: Vec<AutoDiffItem> = vec![];
-    for item in diff_items {
-        if item.attrs.mode == DiffMode::ForwardFirst || item.attrs.mode == DiffMode::ReverseFirst {
-            first_order_items.push(item);
-        } else {
-            // default
-            higher_order_items.push(item);
-        }
-    }
-
-    let fnc_opt = ad.contains(&AutoDiff::EnableFncOpt);
-
-    // If a function is a base for some higher order ad, always optimize
-    let fnc_opt_base = true;
-    let logic_ref_opt: EnzymeLogicRef = unsafe { CreateEnzymeLogic(fnc_opt_base as u8) };
-
-    for item in first_order_items {
-        let res =
-            unsafe { enzyme_ad(llmod, llcx, &diag_handler.handle(), item, logic_ref_opt, ad) };
-        assert!(res.is_ok());
-    }
-
-    // For the rest, follow the user choice on debug vs release.
-    // Reuse the opt one if possible for better compile time (Enzyme internal caching).
-    let logic_ref = match fnc_opt {
-        true => {
-            dbg!("Enable extra optimizations for Enzyme");
-            logic_ref_opt
-        }
-        false => unsafe { CreateEnzymeLogic(fnc_opt as u8) },
-    };
-    for item in higher_order_items {
-        let res = unsafe { enzyme_ad(llmod, llcx, &diag_handler.handle(), item, logic_ref, ad) };
-        assert!(res.is_ok());
-    }
+    let _fnc_opt = ad.contains(&AutoDiff::EnableFncOpt);
 
     unsafe {
         let mut f = LLVMGetFirstFunction(llmod);
@@ -1225,14 +1206,44 @@ pub(crate) unsafe fn differentiate(
                 break;
             }
         }
-        if ad.contains(&AutoDiff::PrintModAfterEnzyme) {
-            LLVMDumpModule(llmod);
-        }
     }
 
-    if ad.contains(&AutoDiff::NoModOptAfter) || !differentiate {
-        trace!("Skipping module optimization after automatic differentiation");
-    } else {
+    //if ad.contains(&AutoDiff::NoModOptAfter) || !differentiate {
+    //    trace!("Skipping module optimization after automatic differentiation");
+    //} else {
+    if let Some(opt_level) = config.opt_level {
+        let opt_stage = match cgcx.lto {
+            Lto::Fat => llvm::OptStage::PreLinkFatLTO,
+            Lto::Thin | Lto::ThinLocal => llvm::OptStage::PreLinkThinLTO,
+            _ if cgcx.opts.cg.linker_plugin_lto.enabled() => llvm::OptStage::PreLinkThinLTO,
+            _ => llvm::OptStage::PreLinkNoLTO,
+        };
+        let mut first_run = false;
+        dbg!("Running Module Optimization after differentiation");
+        if ad.contains(&AutoDiff::NoVecUnroll) {
+            // disables vectorization and loop unrolling
+            first_run = true;
+        }
+        if ad.contains(&AutoDiff::AltPipeline) {
+            dbg!("Running first postAD optimization");
+            first_run = true;
+        }
+        let noop = false;
+        unsafe {
+            llvm_optimize(
+                cgcx,
+                diag_handler.handle(),
+                module,
+                config,
+                opt_level,
+                opt_stage,
+                first_run,
+                noop,
+            )?
+        };
+    }
+    if ad.contains(&AutoDiff::AltPipeline) {
+        dbg!("Running Second postAD optimization");
         if let Some(opt_level) = config.opt_level {
             let opt_stage = match cgcx.lto {
                 Lto::Fat => llvm::OptStage::PreLinkFatLTO,
@@ -1243,12 +1254,8 @@ pub(crate) unsafe fn differentiate(
             let mut first_run = false;
             dbg!("Running Module Optimization after differentiation");
             if ad.contains(&AutoDiff::NoVecUnroll) {
-                // disables vectorization and loop unrolling
-                first_run = true;
-            }
-            if ad.contains(&AutoDiff::AltPipeline) {
-                dbg!("Running first postAD optimization");
-                first_run = true;
+                // enables vectorization and loop unrolling
+                first_run = false;
             }
             let noop = false;
             unsafe {
@@ -1264,36 +1271,10 @@ pub(crate) unsafe fn differentiate(
                 )?
             };
         }
-        if ad.contains(&AutoDiff::AltPipeline) {
-            dbg!("Running Second postAD optimization");
-            if let Some(opt_level) = config.opt_level {
-                let opt_stage = match cgcx.lto {
-                    Lto::Fat => llvm::OptStage::PreLinkFatLTO,
-                    Lto::Thin | Lto::ThinLocal => llvm::OptStage::PreLinkThinLTO,
-                    _ if cgcx.opts.cg.linker_plugin_lto.enabled() => llvm::OptStage::PreLinkThinLTO,
-                    _ => llvm::OptStage::PreLinkNoLTO,
-                };
-                let mut first_run = false;
-                dbg!("Running Module Optimization after differentiation");
-                if ad.contains(&AutoDiff::NoVecUnroll) {
-                    // enables vectorization and loop unrolling
-                    first_run = false;
-                }
-                let noop = false;
-                unsafe {
-                    llvm_optimize(
-                        cgcx,
-                        diag_handler.handle(),
-                        module,
-                        config,
-                        opt_level,
-                        opt_stage,
-                        first_run,
-                        noop,
-                    )?
-                };
-            }
-        }
+    }
+    //}
+    if ad.contains(&AutoDiff::PrintModAfterEnzyme) {
+        unsafe {LLVMDumpModule(llmod)};
     }
 
     if ad.contains(&AutoDiff::PrintModAfterOpts) {
@@ -1301,6 +1282,7 @@ pub(crate) unsafe fn differentiate(
             LLVMDumpModule(llmod);
         }
     }
+    dbg!("Done with differentiate()");
 
     Ok(())
 }
@@ -1379,12 +1361,6 @@ pub(crate) unsafe fn optimize(
         // Second run only relevant for AD
         let first_run = true;
         let noop = false;
-        //if ad.contains(&AutoDiff::AltPipeline) {
-        //    noop = true;
-        //    dbg!("Skipping PreAD optimization");
-        //} else {
-        //    noop = false;
-        //}
         return unsafe {
             llvm_optimize(cgcx, dcx, module, config, opt_level, opt_stage, first_run, noop)
         };
