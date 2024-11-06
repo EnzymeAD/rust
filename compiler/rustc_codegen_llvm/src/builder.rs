@@ -97,13 +97,20 @@ pub(crate) fn add_opt_dbg_helper2<'ll>(
 ) {
     let inputs = attrs.input_activity;
     let output = attrs.ret_activity;
-    let ad_name = match attrs.mode {
+    let mut ad_name: String = match attrs.mode {
         DiffMode::Forward => "__enzyme_fwddiff",
         DiffMode::Reverse => "__enzyme_autodiff",
         DiffMode::ForwardFirst => "__enzyme_fwddiff",
         DiffMode::ReverseFirst => "__enzyme_autodiff",
         _ => panic!("Why are we here?"),
+    }.to_string();
+    // add tgt name to ad_name to make it unique
+    let tgt_name = unsafe {
+        let mut len: usize = 0;
+        let name = llvm::LLVMGetValueName2(tgt, &mut len as *mut usize);
+        std::ffi::CStr::from_ptr(name).to_str().unwrap()
     };
+    ad_name.push_str(tgt_name.to_string().as_str());
 
     // Assuming that our val is the fnc square, want to generate the following llvm-ir:
     // declare double @__enzyme_autodiff(...)
