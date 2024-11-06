@@ -650,7 +650,7 @@ pub mod Enzyme_AD {
         static mut MaxTypeOffset: c_void;
         static mut EnzymeMaxTypeDepth: c_void;
 
-        static mut EnzymeRuntimeActivityCheck: c_void;
+        //static mut EnzymeRuntimeActivityCheck: c_void;
         static mut EnzymePrintPerf: c_void;
         static mut EnzymePrintActivity: c_void;
         static mut EnzymePrintType: c_void;
@@ -660,9 +660,9 @@ pub mod Enzyme_AD {
         static mut EnzymeInline: c_void;
     }
     pub fn set_runtime_activity_check(check: bool) {
-        unsafe {
-            EnzymeSetCLBool(std::ptr::addr_of_mut!(EnzymeRuntimeActivityCheck), check as u8);
-        }
+        //unsafe {
+        //    EnzymeSetCLBool(std::ptr::addr_of_mut!(EnzymeRuntimeActivityCheck), check as u8);
+        //}
     }
     pub fn set_max_int_offset(offset: u64) {
         let offset = offset.try_into().unwrap();
