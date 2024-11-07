@@ -1052,6 +1052,7 @@ pub(crate) unsafe fn enzyme_ad(
                 args_activity,
                 ret_activity,
                 void_ret,
+                ad.contains(&AutoDiff::RuntimeActivity),
             ),
             DiffMode::Reverse => enzyme_rust_reverse_diff(
                 logic_ref,
@@ -1059,6 +1060,7 @@ pub(crate) unsafe fn enzyme_ad(
                 src_fnc,
                 args_activity,
                 ret_activity,
+                ad.contains(&AutoDiff::RuntimeActivity),
             ),
             _ => unreachable!(),
         };
@@ -1136,11 +1138,6 @@ pub(crate) unsafe fn differentiate(
     if ad.contains(&AutoDiff::Inline) {
         dbg!("Setting inline to true");
         llvm::set_inline(true);
-    }
-
-    if ad.contains(&AutoDiff::RuntimeActivity) {
-        dbg!("Setting runtime activity check to true");
-        llvm::set_runtime_activity_check(true);
     }
 
     for val in ad {

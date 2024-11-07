@@ -2,7 +2,6 @@
 
 use libc::{c_char, c_uint, size_t};
 use rustc_ast::expand::autodiff_attrs::DiffActivity;
-use rustc_middle::mir::RuntimePhase;
 use tracing::trace;
 
 use super::ffi::*;
@@ -78,6 +77,7 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
     input_diffactivity: Vec<DiffActivity>,
     ret_diffactivity: DiffActivity,
     void_ret: bool,
+    runtimeactivity: bool,
 ) -> (&Value, Vec<usize>) {
     let ret_activity = cdiffe_from(ret_diffactivity);
     assert!(ret_activity != CDIFFE_TYPE::DFT_OUT_DIFF);
@@ -127,8 +127,6 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
         KnownValues: known_values.as_mut_ptr(),
     };
 
-    let runtimeactivity = false as u8;
-
     trace!("ret_activity: {}", &ret_activity);
     for i in &input_activity {
         trace!("input_activity i: {}", &i);
@@ -146,7 +144,7 @@ pub(crate) unsafe fn enzyme_rust_forward_diff(
             type_analysis,        // type analysis struct
             ret_primary_ret as u8,
             CDerivativeMode::DEM_ForwardMode, // return value, dret_used, top_level which was 1
-            runtimeactivity,
+            runtimeactivity as u8,
             1,                                // free memory
             1,                                // vector mode width
             Option::None,
@@ -166,6 +164,7 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
     fnc: &Value,
     rust_input_activity: Vec<DiffActivity>,
     ret_activity: DiffActivity,
+    runtimeactivity: bool,
 ) -> (&Value, Vec<usize>) {
     let (primary_ret, ret_activity) = match ret_activity {
         DiffActivity::Const => (true, CDIFFE_TYPE::DFT_CONSTANT),
@@ -210,7 +209,6 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
         Return: ret_tt.inner,
         KnownValues: known_values.as_mut_ptr(),
     };
-    let runtimeactivity = false as u8;
 
     trace!("primary_ret: {}", &primary_ret);
     trace!("ret_activity: {}", &ret_activity);
@@ -231,7 +229,7 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
             primary_ret as u8,
             diff_ret as u8,                           //0
             CDerivativeMode::DEM_ReverseModeCombined, // return value, dret_used, top_level which was 1
-            runtimeactivity,
+            runtimeactivity as u8,
             1,                                        // vector mode width
             1,                                        // free memory
             Option::None,
@@ -666,11 +664,6 @@ pub mod Enzyme_AD {
         static mut EnzymeStrictAliasing: c_void;
         static mut looseTypeAnalysis: c_void;
         static mut EnzymeInline: c_void;
-    }
-    pub fn set_runtime_activity_check(check: bool) {
-        //unsafe {
-        //    EnzymeSetCLBool(std::ptr::addr_of_mut!(EnzymeRuntimeActivityCheck), check as u8);
-        //}
     }
     pub fn set_max_int_offset(offset: u64) {
         let offset = offset.try_into().unwrap();
