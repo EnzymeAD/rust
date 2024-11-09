@@ -432,7 +432,7 @@ fn adjust_for_rust_scalar<'tcx>(
             //
             // `&mut T` and `Box<T>` where `T: Unpin` are unique and hence `noalias`.
             let no_alias = match kind {
-                PointerKind::SharedRef { frozen } => frozen,
+                PointerKind::SharedRef { frozen } => frozen && noalias_mut_ref,
                 PointerKind::MutableRef { unpin } => unpin && noalias_mut_ref,
                 PointerKind::Box { unpin, global } => unpin && global && noalias_for_box,
             };
