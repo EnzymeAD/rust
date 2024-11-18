@@ -39,6 +39,7 @@ pub trait WriteBackendMethods: 'static + Sized + Clone {
     ) -> Result<(Vec<LtoModuleCodegen<Self>>, Vec<WorkProduct>), FatalError>;
     fn print_pass_timings(&self);
     fn print_statistics(&self);
+    // does enzyme prep work, should do ad too.
     unsafe fn optimize(
         cgcx: &CodegenContext<Self>,
         dcx: DiagCtxtHandle<'_>,

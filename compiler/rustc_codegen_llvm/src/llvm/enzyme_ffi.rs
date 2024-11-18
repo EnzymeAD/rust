@@ -245,10 +245,10 @@ pub(crate) unsafe fn enzyme_rust_reverse_diff(
     (res, primal_sizes)
 }
 
-#[cfg(not(llvm_enzyme))]
+#[cfg(not(not(llvm_enzyme)))]
 pub use self::Fallback_AD::*;
 
-#[cfg(not(llvm_enzyme))]
+#[cfg(not(not(llvm_enzyme)))]
 pub mod Fallback_AD {
     #![allow(unused_variables)]
     use super::*;
@@ -427,9 +427,9 @@ pub mod Shared_AD {
     use rustc_ast::expand::autodiff_attrs::DiffActivity;
 
     use super::Context;
-    #[cfg(llvm_enzyme)]
-    use super::Enzyme_AD::*;
     #[cfg(not(llvm_enzyme))]
+    use super::Enzyme_AD::*;
+    #[cfg(not(not(llvm_enzyme)))]
     use super::Fallback_AD::*;
     #[repr(u32)]
     #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -632,13 +632,13 @@ pub mod Shared_AD {
     }
 }
 
-#[cfg(llvm_enzyme)]
+#[cfg(not(llvm_enzyme))]
 pub use self::Enzyme_AD::*;
 
 // Enzyme is an optional component, so we do need to provide a fallback when it is ont getting
 // compiled. We deny the usage of #[autodiff(..)] on a higher level, so a placeholder implementation
 // here is completely fine.
-#[cfg(llvm_enzyme)]
+#[cfg(not(llvm_enzyme))]
 pub mod Enzyme_AD {
     use libc::{c_char, c_void, size_t};
 

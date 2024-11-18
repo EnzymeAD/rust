@@ -216,6 +216,7 @@ impl WriteBackendMethods for LlvmCodegenBackend {
     ) -> Result<(Vec<LtoModuleCodegen<Self>>, Vec<WorkProduct>), FatalError> {
         back::lto::run_thin(cgcx, modules, cached_modules)
     }
+    // Manuel
     unsafe fn optimize(
         cgcx: &CodegenContext<Self>,
         dcx: DiagCtxtHandle<'_>,
@@ -267,7 +268,7 @@ impl WriteBackendMethods for LlvmCodegenBackend {
             let dcx = cgcx.create_dcx();
             return Err(dcx.handle().emit_almost_fatal(AutoDiffWithoutLTO {}));
         }
-        unsafe { back::write::differentiate(module, cgcx, diff_fncs, typetrees, config) }
+        back::write::differentiate(module, cgcx, diff_fncs, typetrees, config)
     }
 
     // The typetrees contain all information, their order therefore is irrelevant.
