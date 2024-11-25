@@ -1275,7 +1275,6 @@ rustc_queries! {
     query autodiff_attrs(def_id: DefId) -> &'tcx AutoDiffAttrs {
         desc { |tcx| "computing autodiff attributes of `{}`", tcx.def_path_str(def_id) }
         arena_cache
-        cache_on_disk_if { def_id.is_local() }
     }
 
     query asm_target_features(def_id: DefId) -> &'tcx FxIndexSet<Symbol> {

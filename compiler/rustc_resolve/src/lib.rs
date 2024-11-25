@@ -1168,8 +1168,6 @@ pub struct Resolver<'ra, 'tcx> {
     node_id_to_def_id: NodeMap<Feed<'tcx, LocalDefId>>,
     def_id_to_node_id: IndexVec<LocalDefId, ast::NodeId>,
 
-    autodiff_map: FxHashMap<LocalDefId, LocalDefId>,
-
     /// Indices of unnamed struct or variant fields with unresolved attributes.
     placeholder_field_indices: FxHashMap<NodeId, usize>,
     /// When collecting definitions from an AST fragment produced by a macro invocation `ExpnId`
@@ -1541,7 +1539,6 @@ impl<'ra, 'tcx> Resolver<'ra, 'tcx> {
             next_node_id: CRATE_NODE_ID,
             node_id_to_def_id,
             def_id_to_node_id,
-            autodiff_map: Default::default(),
             placeholder_field_indices: Default::default(),
             invocation_parents,
             trait_impl_items: Default::default(),
@@ -1671,7 +1668,6 @@ impl<'ra, 'tcx> Resolver<'ra, 'tcx> {
                 .into_items()
                 .map(|(k, f)| (k, f.key()))
                 .collect(),
-            autodiff_map: self.autodiff_map,
             trait_map: self.trait_map,
             lifetime_elision_allowed: self.lifetime_elision_allowed,
             lint_buffer: Steal::new(self.lint_buffer),
