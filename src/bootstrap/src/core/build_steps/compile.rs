@@ -1068,10 +1068,6 @@ pub fn rustc_cargo(
     // <https://rust-lang.zulipchat.com/#narrow/stream/131828-t-compiler/topic/Internal.20lint.20for.20raw.20.60print!.60.20and.20.60println!.60.3F>.
     cargo.rustflag("-Zon-broken-pipe=kill");
 
-    if builder.config.llvm_enzyme {
-        cargo.rustflag("-l").rustflag("Enzyme-19");
-    }
-
     // We currently don't support cross-crate LTO in stage0. This also isn't hugely necessary
     // and may just be a time sink.
     if compiler.stage != 0 {

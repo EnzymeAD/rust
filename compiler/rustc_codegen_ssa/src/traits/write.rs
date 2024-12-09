@@ -1,3 +1,4 @@
+use rustc_ast::expand::autodiff_attrs::AutoDiffItem;
 use rustc_errors::{DiagCtxtHandle, FatalError};
 use rustc_middle::dep_graph::WorkProduct;
 
@@ -12,6 +13,7 @@ pub trait WriteBackendMethods: 'static + Sized + Clone {
     type ModuleBuffer: ModuleBufferMethods;
     type ThinData: Send + Sync;
     type ThinBuffer: ThinBufferMethods;
+    //type TypeTree: Clone;
 
     /// Merge all modules into main_module and returning it
     fn run_link(
@@ -36,6 +38,7 @@ pub trait WriteBackendMethods: 'static + Sized + Clone {
     ) -> Result<(Vec<LtoModuleCodegen<Self>>, Vec<WorkProduct>), FatalError>;
     fn print_pass_timings(&self);
     fn print_statistics(&self);
+    // does enzyme prep work, should do ad too.
     unsafe fn optimize(
         cgcx: &CodegenContext<Self>,
         dcx: DiagCtxtHandle<'_>,
@@ -61,6 +64,13 @@ pub trait WriteBackendMethods: 'static + Sized + Clone {
         want_summary: bool,
     ) -> (String, Self::ThinBuffer);
     fn serialize_module(module: ModuleCodegen<Self::Module>) -> (String, Self::ModuleBuffer);
+    /// Generate autodiff rules
+    fn autodiff(
+        cgcx: &CodegenContext<Self>,
+        module: &ModuleCodegen<Self::Module>,
+        diff_fncs: Vec<AutoDiffItem>,
+        config: &ModuleConfig,
+    ) -> Result<(), FatalError>;
 }
 
 pub trait ThinBufferMethods: Send + Sync {

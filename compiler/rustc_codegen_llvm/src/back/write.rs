@@ -4,10 +4,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{fs, slice, str};
 
-use libc::{c_char, c_int, c_void, size_t};
+use libc::{c_char, c_int, c_uint, c_void, size_t};
 use llvm::{
-    LLVMRustLLVMHasZlibCompressionForDebugSymbols, LLVMRustLLVMHasZstdCompressionForDebugSymbols,
+    LLVMRustLLVMHasZlibCompressionForDebugSymbols,
+    LLVMRustLLVMHasZstdCompressionForDebugSymbols,
 };
+use rustc_ast::expand::autodiff_attrs::AutoDiffItem;
 use rustc_codegen_ssa::back::link::ensure_removed;
 use rustc_codegen_ssa::back::write::{
     BitcodeSection, CodegenContext, EmitObj, ModuleConfig, TargetMachineFactoryConfig,
@@ -22,12 +24,13 @@ use rustc_fs_util::{link_or_copy, path_to_c_string};
 use rustc_middle::ty::TyCtxt;
 use rustc_session::Session;
 use rustc_session::config::{
-    self, Lto, OutputType, Passes, RemapPathScopeComponents, SplitDwarfKind, SwitchWithOptPath,
+    self, AutoDiff, Lto, OutputType, Passes, RemapPathScopeComponents, SplitDwarfKind,
+    SwitchWithOptPath,
 };
 use rustc_span::InnerSpan;
 use rustc_span::symbol::sym;
 use rustc_target::spec::{CodeModel, RelocModel, SanitizerSet, SplitDebuginfo, TlsModel};
-use tracing::debug;
+use tracing::{debug, trace};
 
 use crate::back::lto::ThinBuffer;
 use crate::back::owned_target_machine::OwnedTargetMachine;
@@ -39,7 +42,17 @@ use crate::errors::{
     WithLlvmError, WriteBytecode,
 };
 use crate::llvm::diagnostic::OptimizationDiagnosticKind::*;
-use crate::llvm::{self, DiagnosticInfo, PassManager};
+use crate::llvm::{
+    self, AttributeKind, DiagnosticInfo,
+    LLVMCreateStringAttribute, LLVMDumpModule,
+    LLVMGetFirstFunction, LLVMGetNextFunction,
+    LLVMGetStringAttributeAtIndex, LLVMIsEnumAttribute,
+    LLVMIsStringAttribute,
+    LLVMRemoveStringAttributeAtIndex, LLVMRustAddEnumAttributeAtIndex,
+    LLVMRustAddFunctionAttributes,
+    LLVMRustGetEnumAttributeAtIndex,
+    LLVMRustRemoveEnumAttributeAtIndex, PassManager,
+};
 use crate::type_::Type;
 use crate::{LlvmCodegenBackend, ModuleLlvm, base, common, llvm_util};
 
@@ -515,9 +528,34 @@ pub(crate) unsafe fn llvm_optimize(
     config: &ModuleConfig,
     opt_level: config::OptLevel,
     opt_stage: llvm::OptStage,
+    first_run: bool,
 ) -> Result<(), FatalError> {
-    let unroll_loops =
-        opt_level != config::OptLevel::Size && opt_level != config::OptLevel::SizeMin;
+    // Enzyme:
+    // The whole point of compiler based AD is to differentiate optimized IR instead of unoptimized
+    // source code. However, benchmarks show that optimizations increasing the code size
+    // tend to reduce AD performance. Therefore deactivate them before AD, then differentiate the code
+    // and finally re-optimize the module, now with all optimizations available.
+    // TODO: In a future update we could figure out how to only optimize functions getting
+    // differentiated.
+
+    let unroll_loops;
+    let vectorize_slp;
+    let vectorize_loop;
+
+    if first_run {
+        unroll_loops = false;
+        vectorize_slp = false;
+        vectorize_loop = false;
+    } else {
+        unroll_loops =
+            opt_level != config::OptLevel::Size && opt_level != config::OptLevel::SizeMin;
+        vectorize_slp = config.vectorize_slp;
+        vectorize_loop = config.vectorize_loop;
+    }
+    trace!(
+        "Enzyme: Running with unroll_loops: {}, vectorize_slp: {}, vectorize_loop: {}",
+        unroll_loops, vectorize_slp, vectorize_loop
+    );
     let using_thin_buffers = opt_stage == llvm::OptStage::PreLinkThinLTO || config.bitcode_needed();
     let pgo_gen_path = get_pgo_gen_path(config);
     let pgo_use_path = get_pgo_use_path(config);
@@ -581,8 +619,8 @@ pub(crate) unsafe fn llvm_optimize(
             using_thin_buffers,
             config.merge_functions,
             unroll_loops,
-            config.vectorize_slp,
-            config.vectorize_loop,
+            vectorize_slp,
+            vectorize_loop,
             config.no_builtins,
             config.emit_lifetime_markers,
             sanitizer_options.as_ref(),
@@ -603,6 +641,162 @@ pub(crate) unsafe fn llvm_optimize(
         )
     };
     result.into_result().map_err(|()| llvm_err(dcx, LlvmError::RunLlvmPasses))
+}
+
+#[allow(non_snake_case)]
+unsafe fn EnzymeSetCLBool(ptr: *mut c_int, val: u8) {
+    unsafe {
+        //let ptr = ptr as *mut c_int;
+        *ptr = val as c_int;
+    }
+}
+
+pub(crate) fn differentiate(
+    module: &ModuleCodegen<ModuleLlvm>,
+    cgcx: &CodegenContext<LlvmCodegenBackend>,
+    diff_items: Vec<AutoDiffItem>,
+    config: &ModuleConfig,
+) -> Result<(), FatalError> {
+    for item in &diff_items {
+        trace!("{}", item);
+    }
+
+    let llmod = module.module_llvm.llmod();
+    let llcx = &module.module_llvm.llcx;
+    let diag_handler = cgcx.create_dcx();
+
+    //llvm::set_strict_aliasing(false);
+
+    let ad = &config.autodiff;
+
+    if ad.contains(&AutoDiff::LooseTypes) {
+        dbg!("Setting loose types to true");
+        #[allow(non_upper_case_globals)]
+        static mut looseTypeAnalysis: c_int = 0;
+        unsafe {
+            EnzymeSetCLBool(std::ptr::addr_of_mut!(looseTypeAnalysis), true as u8);
+        }
+    }
+
+    // Before dumping the module, we want all the tt to become part of the module.
+    for item in diff_items.iter() {
+        let name = CString::new(item.source.clone()).unwrap();
+        let fn_def: Option<&llvm::Value> =
+            unsafe { llvm::LLVMGetNamedFunction(llmod, name.as_ptr()) };
+        let fn_def = match fn_def {
+            Some(x) => x,
+            None => return Err(llvm_err(diag_handler.handle(), LlvmError::PrepareAutoDiff {
+                src: item.source.clone(),
+                target: item.target.clone(),
+                error: "could not find source function".to_owned(),
+            })),
+        };
+        let tgt_name = CString::new(item.target.clone()).unwrap();
+        dbg!("Target name: {:?}", &tgt_name);
+        let fn_target: Option<&llvm::Value> =
+            unsafe { llvm::LLVMGetNamedFunction(llmod, tgt_name.as_ptr()) };
+        let fn_target = match fn_target {
+            Some(x) => x,
+            None => return Err(llvm_err(diag_handler.handle(), LlvmError::PrepareAutoDiff {
+                src: item.source.clone(),
+                target: item.target.clone(),
+                error: "could not find target function".to_owned(),
+            })),
+        };
+
+        crate::builder::add_opt_dbg_helper2(
+            llmod,
+            llcx,
+            fn_def,
+            fn_target,
+            item.attrs.clone(),
+        );
+    }
+
+    if ad.contains(&AutoDiff::PrintModBefore) {
+        unsafe {
+            LLVMDumpModule(llmod);
+        }
+    }
+
+    if ad.contains(&AutoDiff::Inline) {
+        trace!("Setting Enzyme inline to true");
+        #[allow(non_upper_case_globals)]
+        static mut EnzymeInline: c_int = 0;
+        unsafe {
+            EnzymeSetCLBool(std::ptr::addr_of_mut!(EnzymeInline), true as u8);
+        }
+    }
+
+    unsafe {
+        let mut f = LLVMGetFirstFunction(llmod);
+        loop {
+            if let Some(lf) = f {
+                f = LLVMGetNextFunction(lf);
+                let myhwattr = "enzyme_hw";
+                let attr = LLVMGetStringAttributeAtIndex(
+                    lf,
+                    c_uint::MAX,
+                    myhwattr.as_ptr() as *const c_char,
+                    myhwattr.as_bytes().len() as c_uint,
+                );
+                if LLVMIsStringAttribute(attr) {
+                    LLVMRemoveStringAttributeAtIndex(
+                        lf,
+                        c_uint::MAX,
+                        myhwattr.as_ptr() as *const c_char,
+                        myhwattr.as_bytes().len() as c_uint,
+                    );
+                } else {
+                    LLVMRustRemoveEnumAttributeAtIndex(
+                        lf,
+                        c_uint::MAX,
+                        AttributeKind::SanitizeHWAddress,
+                    );
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
+    if let Some(opt_level) = config.opt_level {
+        let opt_stage = match cgcx.lto {
+            Lto::Fat => llvm::OptStage::PreLinkFatLTO,
+            Lto::Thin | Lto::ThinLocal => llvm::OptStage::PreLinkThinLTO,
+            _ if cgcx.opts.cg.linker_plugin_lto.enabled() => llvm::OptStage::PreLinkThinLTO,
+            _ => llvm::OptStage::PreLinkNoLTO,
+        };
+        let mut first_run = false;
+        dbg!("Running Module Optimization after differentiation");
+        if ad.contains(&AutoDiff::NoVecUnroll) {
+            // disables vectorization and loop unrolling
+            first_run = true;
+        }
+        unsafe {
+            llvm_optimize(
+                cgcx,
+                diag_handler.handle(),
+                module,
+                config,
+                opt_level,
+                opt_stage,
+                first_run,
+            )?
+        };
+    }
+    if ad.contains(&AutoDiff::PrintModAfterEnzyme) {
+        unsafe {LLVMDumpModule(llmod)};
+    }
+
+    if ad.contains(&AutoDiff::PrintModAfterOpts) {
+        unsafe {
+            LLVMDumpModule(llmod);
+        }
+    }
+    dbg!("Done with differentiate()");
+
+    Ok(())
 }
 
 // Unsafe due to LLVM calls.
@@ -627,6 +821,47 @@ pub(crate) unsafe fn optimize(
         unsafe { llvm::LLVMWriteBitcodeToFile(llmod, out.as_ptr()) };
     }
 
+    // This code enables Enzyme to differentiate code containing Rust enums.
+    // By adding the SanitizeHWAddress attribute we prevent LLVM from Optimizing
+    // away the enums and allows Enzyme to understand why a value can be of different types in
+    // different code sections. We remove this attribute after Enzyme is done, to not affect the
+    // rest of the compilation.
+    // TODO: only enable this code when at least one function gets differentiated.
+    unsafe {
+        let mut f = LLVMGetFirstFunction(llmod);
+        loop {
+            if let Some(lf) = f {
+                f = LLVMGetNextFunction(lf);
+                let myhwattr = "enzyme_hw";
+                let myhwv = "";
+                let prevattr = LLVMRustGetEnumAttributeAtIndex(
+                    lf,
+                    c_uint::MAX,
+                    AttributeKind::SanitizeHWAddress,
+                );
+                if LLVMIsEnumAttribute(prevattr) {
+                    let attr = LLVMCreateStringAttribute(
+                        llcx,
+                        myhwattr.as_ptr() as *const c_char,
+                        myhwattr.as_bytes().len() as c_uint,
+                        myhwv.as_ptr() as *const c_char,
+                        myhwv.as_bytes().len() as c_uint,
+                    );
+                    LLVMRustAddFunctionAttributes(lf, c_uint::MAX, &attr, 1);
+                } else {
+                    LLVMRustAddEnumAttributeAtIndex(
+                        llcx,
+                        lf,
+                        c_uint::MAX,
+                        AttributeKind::SanitizeHWAddress,
+                    );
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
     if let Some(opt_level) = config.opt_level {
         let opt_stage = match cgcx.lto {
             Lto::Fat => llvm::OptStage::PreLinkFatLTO,
@@ -634,7 +869,12 @@ pub(crate) unsafe fn optimize(
             _ if cgcx.opts.cg.linker_plugin_lto.enabled() => llvm::OptStage::PreLinkThinLTO,
             _ => llvm::OptStage::PreLinkNoLTO,
         };
-        return unsafe { llvm_optimize(cgcx, dcx, module, config, opt_level, opt_stage) };
+
+        // Second run only relevant for AD
+        let first_run = true;
+        return unsafe {
+            llvm_optimize(cgcx, dcx, module, config, opt_level, opt_stage, first_run)
+        };
     }
     Ok(())
 }

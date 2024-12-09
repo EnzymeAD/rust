@@ -213,6 +213,9 @@ pub struct ResolverAstLowering {
 
     pub next_node_id: ast::NodeId,
 
+    /// Mapping of autodiff function IDs
+    pub autodiff_map: FxHashMap<LocalDefId, LocalDefId>,
+
     pub node_id_to_def_id: NodeMap<LocalDefId>,
 
     pub trait_map: NodeMap<Vec<hir::TraitCandidate>>,

@@ -13,6 +13,10 @@ passes_abi_ne =
 passes_abi_of =
     fn_abi_of({$fn_name}) = {$fn_abi}
 
+passes_autodiff_attr =
+    `#[autodiff]` should be applied to a function
+    .label = not a function
+
 passes_allow_incoherent_impl =
     `rustc_allow_incoherent_impl` attribute should be applied to impl items
     .label = the only currently supported targets are inherent methods
@@ -48,10 +52,6 @@ passes_attr_crate_level =
 
 passes_attr_only_in_functions =
     `{$attr}` attribute can only be used on functions
-
-passes_autodiff_attr =
-    `#[autodiff]` should be applied to a function
-    .label = not a function
 
 passes_both_ffi_const_and_pure =
     `#[ffi_const]` function cannot be `#[ffi_pure]`

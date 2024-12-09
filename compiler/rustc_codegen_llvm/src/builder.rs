@@ -5,6 +5,7 @@ use std::{iter, ptr};
 use libc::{c_char, c_uint};
 use rustc_abi as abi;
 use rustc_abi::{Align, Size, WrappingRange};
+use rustc_ast::expand::autodiff_attrs::{AutoDiffAttrs, DiffActivity, DiffMode};
 use rustc_codegen_ssa::MemFlags;
 use rustc_codegen_ssa::common::{IntPredicate, RealPredicate, SynchronizationScope, TypeKind};
 use rustc_codegen_ssa::mir::operand::{OperandRef, OperandValue};
@@ -24,16 +25,217 @@ use rustc_span::Span;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::spec::{HasTargetSpec, SanitizerSet, Target};
 use smallvec::SmallVec;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, trace};
 
 use crate::abi::FnAbiLlvmExt;
 use crate::attributes;
 use crate::common::Funclet;
 use crate::context::CodegenCx;
-use crate::llvm::{self, AtomicOrdering, AtomicRmwBinOp, BasicBlock, False, True};
+use crate::llvm::{self, AtomicOrdering, AtomicRmwBinOp, BasicBlock, False, Metadata, True};
 use crate::type_::Type;
 use crate::type_of::LayoutLlvmExt;
 use crate::value::Value;
+
+fn get_params(fnc: &Value) -> Vec<&Value> {
+    unsafe {
+        let param_num = llvm::LLVMCountParams(fnc) as usize;
+        let mut fnc_args: Vec<&Value> = vec![];
+        fnc_args.reserve(param_num);
+        llvm::LLVMGetParams(fnc, fnc_args.as_mut_ptr());
+        fnc_args.set_len(param_num);
+        fnc_args
+    }
+}
+
+pub(crate) fn add_opt_dbg_helper2<'ll>(
+    llmod: &'ll llvm::Module,
+    llcx: &'ll llvm::Context,
+    todiff: &'ll Value,
+    outer_fn: &'ll Value,
+    attrs: AutoDiffAttrs,
+) {
+    let inputs = attrs.input_activity;
+    let output = attrs.ret_activity;
+    let mut ad_name: String = match attrs.mode {
+        DiffMode::Forward => "__enzyme_fwddiff",
+        DiffMode::Reverse => "__enzyme_autodiff",
+        DiffMode::ForwardFirst => "__enzyme_fwddiff",
+        DiffMode::ReverseFirst => "__enzyme_autodiff",
+        _ => panic!("Why are we here?"),
+    }.to_string();
+    // add outer_fn name to ad_name to make it unique
+    let outer_fn_name = unsafe {
+        let mut len: usize = 0;
+        let name = llvm::LLVMGetValueName2(outer_fn, &mut len as *mut usize);
+        std::ffi::CStr::from_ptr(name).to_str().unwrap()
+    };
+    ad_name.push_str(outer_fn_name.to_string().as_str());
+
+    // Assuming that our todiff is the fnc square, want to generate the following llvm-ir:
+    // declare double @__enzyme_autodiff(...)
+    //
+    // define double @dsquare(double %x) {
+    // entry:
+    //   %0 = tail call double (...) @__enzyme_autodiff(double (double)* nonnull @square, double %x)
+    //   ret double %0
+    // }
+
+    unsafe {
+        let fn_ty = llvm::LLVMRustGetFunctionType(outer_fn);
+        let ret_ty = llvm::LLVMGetReturnType(fn_ty);
+
+        // First we add the declaration of the __enzyme function
+        let enzyme_ty = llvm::LLVMFunctionType(ret_ty, ptr::null(), 0, True);
+        let ad_fn = llvm::LLVMRustGetOrInsertFunction(
+            llmod,
+            ad_name.as_ptr() as *const c_char,
+            ad_name.len().try_into().unwrap(),
+            enzyme_ty,
+        );
+        llvm::LLVMRustAddEnumAttributeAtIndex(
+            llcx,
+            ad_fn,
+            c_uint::MAX,
+            llvm::AttributeKind::NoInline,
+        );
+
+        // first, remove all calls from fnc
+        let entry = llvm::LLVMGetFirstBasicBlock(outer_fn);
+        let br = llvm::LLVMRustGetTerminator(entry);
+        llvm::LLVMRustEraseInstFromParent(br);
+
+        let builder = llvm::LLVMCreateBuilderInContext(llcx);
+        let last_inst = llvm::LLVMRustGetLastInstruction(entry).unwrap();
+        llvm::LLVMPositionBuilderAtEnd(builder, entry);
+
+        let num_args = llvm::LLVMCountParams(todiff);
+        let mut args = Vec::with_capacity(num_args as usize + 1);
+        args.push(todiff);
+        let enzyme_const =
+            llvm::LLVMMDStringInContext2(llcx, "enzyme_const".as_ptr() as *const c_char, 12);
+        let enzyme_out =
+            llvm::LLVMMDStringInContext2(llcx, "enzyme_out".as_ptr() as *const c_char, 10);
+        let enzyme_dup =
+            llvm::LLVMMDStringInContext2(llcx, "enzyme_dup".as_ptr() as *const c_char, 10);
+        let enzyme_dupnoneed =
+            llvm::LLVMMDStringInContext2(llcx, "enzyme_dupnoneed".as_ptr() as *const c_char, 16);
+        let enzyme_primal_ret =
+            llvm::LLVMMDStringInContext2(llcx, "enzyme_primal_return".as_ptr() as *const c_char, 20);
+
+        match output {
+            DiffActivity::Dual => {
+                args.push(llvm::LLVMMetadataAsValue(llcx, enzyme_primal_ret));
+            },
+            DiffActivity::Active => {
+                args.push(llvm::LLVMMetadataAsValue(llcx, enzyme_primal_ret));
+            },
+            _ => {},
+        }
+
+        trace!("Matching args");
+        // Idea: We follow the outer function's arguments and activities.
+        // We still keep track of our inner function's arguments, but just
+        // to verify that they match.
+        let mut outer_pos: usize = 0;
+        let mut activity_pos = 0;
+        let outer_args: Vec<&llvm::Value> = get_params(outer_fn);
+
+        while activity_pos < inputs.len() {
+            let activity = inputs[activity_pos as usize];
+            let (activity, duplicated): (&Metadata, bool) = match activity {
+                DiffActivity::None => panic!(),
+                DiffActivity::Const => (enzyme_const, false),
+                DiffActivity::Active => (enzyme_out, false),
+                DiffActivity::ActiveOnly => (enzyme_out, false),
+                DiffActivity::Dual => (enzyme_dup, true),
+                DiffActivity::DualOnly => (enzyme_dupnoneed, true),
+                DiffActivity::Duplicated => (enzyme_dup, true),
+                DiffActivity::DuplicatedOnly => (enzyme_dupnoneed, true),
+                DiffActivity::FakeActivitySize => (enzyme_const, false),
+            };
+            let outer_arg = outer_args[outer_pos];
+            args.push(llvm::LLVMMetadataAsValue(llcx, activity));
+            args.push(outer_arg);
+            // Now if we have a slice and duplicate, then it get's interesting.
+            //
+            if duplicated {
+                let next_outer_arg = outer_args[outer_pos + 1];
+                let next_outer_ty = llvm::LLVMTypeOf(next_outer_arg);
+                let slice = {
+                    if activity_pos + 1 >= inputs.len() {
+                        // If there is no arg following our ptr, it also can't be a slice,
+                        // since that would lead to a ptr, int pair.
+                        false
+                    } else {
+                        let next_activity = inputs[activity_pos + 1];
+                        next_activity == DiffActivity::FakeActivitySize
+                    }
+                };
+                if slice {
+                    assert!(llvm::LLVMRustGetTypeKind(next_outer_ty) == llvm::TypeKind::Integer);
+                    let next_outer_arg2 = outer_args[outer_pos + 2];
+                    let next_outer_ty2 = llvm::LLVMTypeOf(next_outer_arg2);
+                    assert!(llvm::LLVMRustGetTypeKind(next_outer_ty2) == llvm::TypeKind::Pointer);
+                    let next_outer_arg3 = outer_args[outer_pos + 3];
+                    let next_outer_ty3 = llvm::LLVMTypeOf(next_outer_arg3);
+                    assert!(llvm::LLVMRustGetTypeKind(next_outer_ty3) == llvm::TypeKind::Integer);
+                    args.push(next_outer_arg2);
+                    args.push(llvm::LLVMMetadataAsValue(llcx, enzyme_const));
+                    args.push(next_outer_arg);
+                    outer_pos += 4;
+                    activity_pos += 2;
+                } else {
+                    assert!(llvm::LLVMRustGetTypeKind(next_outer_ty) == llvm::TypeKind::Pointer);
+                    args.push(next_outer_arg);
+                    outer_pos += 2;
+                    activity_pos += 1;
+                }
+            } else {
+                outer_pos += 1;
+                activity_pos += 1;
+            }
+        }
+
+        let call = llvm::LLVMBuildCall2(
+            builder,
+            enzyme_ty,
+            ad_fn,
+            args.as_mut_ptr(),
+            args.len().try_into().unwrap(),
+            ad_name.as_ptr() as *const c_char,
+        );
+
+        // Add dummy dbg info to our newly generated call, if we have any.
+        let md_ty = llvm::LLVMGetMDKindIDInContext(
+            llcx,
+            "dbg".as_ptr() as *const c_char,
+            "dbg".len() as c_uint,
+        );
+
+        if llvm::LLVMRustHasMetadata(last_inst, md_ty) {
+            let md = llvm::LLVMRustDIGetInstMetadata(last_inst);
+            let md_todiff = llvm::LLVMMetadataAsValue(llcx, md);
+            let _md2 = llvm::LLVMSetMetadata(call, md_ty, md_todiff);
+        } else {
+            trace!("No dbg info");
+        }
+        llvm::LLVMRustEraseInstBefore(entry, last_inst);
+
+
+        let void_ty = llvm::LLVMVoidTypeInContext(llcx);
+        if llvm::LLVMTypeOf(call) != void_ty {
+            llvm::LLVMBuildRet(builder, call);
+        } else {
+            llvm::LLVMBuildRetVoid(builder);
+        };
+        llvm::LLVMDisposeBuilder(builder);
+
+        let _fnc_ok =
+            llvm::LLVMVerifyFunction(outer_fn, llvm::LLVMVerifierFailureAction::LLVMAbortProcessAction);
+        let _fnc_ok =
+            llvm::LLVMVerifyFunction(todiff, llvm::LLVMVerifierFailureAction::LLVMAbortProcessAction);
+    }
+}
 
 // All Builders must have an llfn associated with them
 #[must_use]
