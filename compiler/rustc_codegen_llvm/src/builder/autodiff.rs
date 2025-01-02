@@ -286,7 +286,7 @@ pub(crate) fn differentiate<'ll, 'tcx>(
     }
 
     let diag_handler = cgcx.create_dcx();
-    let (_, cgus) = tcx.collect_and_partition_mono_items(());
+    let (_, _, cgus) = tcx.collect_and_partition_mono_items(());
     let cx = context::CodegenCx::new(tcx, &cgus.first().unwrap(), &module.module_llvm);
 
     // Before dumping the module, we want all the TypeTrees to become part of the module.

@@ -176,6 +176,8 @@ pub(crate) fn default_configuration(sess: &Session) -> Cfg {
     // NOTE: These insertions should be kept in sync with
     // `CheckCfg::fill_well_known` below.
 
+    ins_none!(sym::autodiff_fallback);
+
     if sess.opts.debug_assertions {
         ins_none!(sym::debug_assertions);
     }
@@ -339,6 +341,7 @@ impl CheckCfg {
         // Don't forget to update `src/doc/rustc/src/check-cfg.md`
         // in the unstable book as well!
 
+        ins!(sym::autodiff_fallback, no_values);
         ins!(sym::debug_assertions, no_values);
 
         ins!(sym::fmt_debug, empty_values).extend(FmtDebug::all());

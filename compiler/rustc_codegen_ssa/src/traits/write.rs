@@ -14,6 +14,7 @@ pub trait WriteBackendMethods: 'static + Sized + Clone {
     type ModuleBuffer: ModuleBufferMethods;
     type ThinData: Send + Sync;
     type ThinBuffer: ThinBufferMethods;
+    //type TypeTree: Clone;
 
     /// Merge all modules into main_module and returning it
     fn run_link(
@@ -38,6 +39,7 @@ pub trait WriteBackendMethods: 'static + Sized + Clone {
     ) -> Result<(Vec<LtoModuleCodegen<Self>>, Vec<WorkProduct>), FatalError>;
     fn print_pass_timings(&self);
     fn print_statistics(&self);
+    // does enzyme prep work, should do ad too.
     unsafe fn optimize(
         cgcx: &CodegenContext<Self>,
         dcx: DiagCtxtHandle<'_>,

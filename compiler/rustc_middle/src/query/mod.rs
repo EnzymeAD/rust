@@ -14,6 +14,7 @@ use std::sync::Arc;
 use rustc_arena::TypedArena;
 use rustc_ast::expand::StrippedCfgItem;
 use rustc_ast::expand::allocator::AllocatorKind;
+use rustc_ast::expand::autodiff_attrs::{AutoDiffAttrs, AutoDiffItem};
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::{FxIndexMap, FxIndexSet};
 use rustc_data_structures::sorted_map::SortedMap;
@@ -1393,6 +1394,13 @@ rustc_queries! {
         feedable
     }
 
+    /// The list autodiff extern functions in current crate
+    query autodiff_attrs(def_id: DefId) -> &'tcx AutoDiffAttrs {
+        desc { |tcx| "computing autodiff attributes of `{}`", tcx.def_path_str(def_id) }
+        arena_cache
+        cache_on_disk_if { def_id.is_local() }
+    }
+
     query asm_target_features(def_id: DefId) -> &'tcx FxIndexSet<Symbol> {
         desc { |tcx| "computing target features for inline asm of `{}`", tcx.def_path_str(def_id) }
     }
@@ -2160,7 +2168,7 @@ rustc_queries! {
         separate_provide_extern
     }
 
-    query collect_and_partition_mono_items(_: ()) -> (&'tcx DefIdSet, &'tcx [CodegenUnit<'tcx>]) {
+    query collect_and_partition_mono_items(_: ()) -> (&'tcx DefIdSet, &'tcx [AutoDiffItem], &'tcx [CodegenUnit<'tcx>]) {
         eval_always
         desc { "collect_and_partition_mono_items" }
     }
