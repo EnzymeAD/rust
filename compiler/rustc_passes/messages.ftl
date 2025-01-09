@@ -13,6 +13,10 @@ passes_abi_ne =
 passes_abi_of =
     fn_abi_of({$fn_name}) = {$fn_abi}
 
+passes_batch_attr =
+    `#[batch]` should be applied to a function
+    .label = not a function
+
 passes_autodiff_attr =
     `#[autodiff]` should be applied to a function
     .label = not a function

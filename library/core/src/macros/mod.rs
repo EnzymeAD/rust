@@ -1541,6 +1541,15 @@ pub(crate) mod builtin {
         ($file:expr $(,)?) => {{ /* compiler built-in */ }};
     }
 
+    /// Batching
+    #[unstable(feature = "batch", issue = "none")]
+    #[allow_internal_unstable(rustc_attrs)]
+    #[rustc_builtin_macro]
+    #[cfg(not(bootstrap))]
+    pub macro batch($item:item) {
+        /* compiler built-in */
+    }
+
     /// Automatic Differentiation macro which allows generating a new function to compute
     /// the derivative of a given function. It may only be applied to a function.
     /// The expected usage syntax is

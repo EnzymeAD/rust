@@ -8,6 +8,7 @@ use crate::MetaItem;
 
 pub mod allocator;
 pub mod autodiff_attrs;
+pub mod batch_attrs;
 pub mod typetree;
 
 #[derive(Debug, Clone, Encodable, Decodable, HashStable_Generic)]

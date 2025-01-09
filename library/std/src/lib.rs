@@ -278,6 +278,8 @@
 #![feature(allow_internal_unstable)]
 #![feature(asm_experimental_arch)]
 #![feature(autodiff)]
+//#![feature(batch)]
+#![cfg_attr(not(bootstrap), feature(batch))]
 #![feature(cfg_sanitizer_cfi)]
 #![feature(cfg_target_thread_local)]
 #![feature(cfi_encoding)]
@@ -619,6 +621,13 @@ pub mod simd {
 
     #[doc(inline)]
     pub use crate::std_float::StdFloat;
+}
+#[unstable(feature = "batch", issue = "124509")]
+#[cfg(not(bootstrap))]
+/// This module provides support for batch processing.
+pub mod batch {
+    /// This macro handles batch processing.
+    pub use core::batch::batch;
 }
 #[unstable(feature = "autodiff", issue = "124509")]
 /// This module provides support for automatic differentiation.

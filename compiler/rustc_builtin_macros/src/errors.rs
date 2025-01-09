@@ -144,6 +144,56 @@ pub(crate) struct AllocMustStatics {
     pub(crate) span: Span,
 }
 
+//#[cfg(llvm_enzyme)]
+pub(crate) use batch::*;
+
+//#[cfg(llvm_enzyme)]
+mod batch {
+    use super::*;
+    //#[derive(Diagnostic)]
+    //#[diag(builtin_macros_batch_invalid)]
+    //pub(crate) struct BatchInvalid {
+    //    #[primary_span]
+    //    pub(crate) span: Span,
+    //}
+    #[derive(Diagnostic)]
+    #[diag(builtin_macros_batch_missing_config)]
+    pub(crate) struct BatchMissingConfig {
+        #[primary_span]
+        pub(crate) span: Span,
+    }
+    #[derive(Diagnostic)]
+    #[diag(builtin_macros_batch_unknown_activity)]
+    pub(crate) struct BatchUnknownActivity {
+        #[primary_span]
+        pub(crate) span: Span,
+        pub(crate) act: String,
+    }
+    #[derive(Diagnostic)]
+    #[diag(builtin_macros_batch_number_activities)]
+    pub(crate) struct BatchInvalidNumberActivities {
+        #[primary_span]
+        pub(crate) span: Span,
+        pub(crate) expected: usize,
+        pub(crate) found: usize,
+    }
+
+    #[derive(Diagnostic)]
+    #[diag(builtin_macros_batch_mode)]
+    pub(crate) struct BatchInvalidMode {
+        #[primary_span]
+        pub(crate) span: Span,
+        pub(crate) arg: String,
+    }
+
+    #[derive(Diagnostic)]
+    #[diag(builtin_macros_batch)]
+    pub(crate) struct BatchInvalidApplication {
+        #[primary_span]
+        pub(crate) span: Span,
+    }
+}
+
 #[cfg(llvm_enzyme)]
 pub(crate) use autodiff::*;
 

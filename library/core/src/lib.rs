@@ -237,6 +237,15 @@ pub mod assert_matches {
 }
 
 // We don't export this through #[macro_export] for now, to avoid breakage.
+#[cfg(not(bootstrap))]
+#[unstable(feature = "batch", issue = "999999")]
+/// Unstable module containing the unstable `batch` macro.
+pub mod batch {
+    #[unstable(feature = "batch", issue = "999999")]
+    pub use crate::macros::builtin::batch;
+}
+
+// We don't export this through #[macro_export] for now, to avoid breakage.
 #[unstable(feature = "autodiff", issue = "124509")]
 /// Unstable module containing the unstable `autodiff` macro.
 pub mod autodiff {

@@ -9,6 +9,8 @@
 #![doc(rust_logo)]
 #![feature(assert_matches)]
 #![feature(autodiff)]
+//#![feature(batch)]
+#![cfg_attr(not(bootstrap), feature(batch))]
 #![feature(box_patterns)]
 #![feature(decl_macro)]
 #![feature(if_let_guard)]
@@ -31,6 +33,7 @@ use crate::deriving::*;
 mod alloc_error_handler;
 mod assert;
 mod autodiff;
+mod batch;
 mod cfg;
 mod cfg_accessible;
 mod cfg_eval;
@@ -109,6 +112,7 @@ pub fn register_builtin_macros(resolver: &mut dyn ResolverExpand) {
     register_attr! {
         alloc_error_handler: alloc_error_handler::expand,
         autodiff: autodiff::expand,
+        batch: batch::expand,
         bench: test::expand_bench,
         cfg_accessible: cfg_accessible::Expander,
         cfg_eval: cfg_eval::expand,
