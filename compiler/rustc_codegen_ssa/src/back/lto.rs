@@ -2,6 +2,7 @@ use std::ffi::CString;
 use std::sync::Arc;
 
 use rustc_ast::expand::autodiff_attrs::AutoDiffItem;
+use rustc_ast::expand::batch_attrs::BatchItem;
 use rustc_data_structures::memmap::Mmap;
 use rustc_errors::FatalError;
 use rustc_middle::ty::TyCtxt;
@@ -98,6 +99,24 @@ impl<B: WriteBackendMethods> LtoModuleCodegen<B> {
                 B::autodiff(cgcx, tcx, &module, diff_fncs, config)?;
             }
             _ => panic!("autodiff called with non-fat LTO module"),
+        }
+
+        Ok(self)
+    }
+
+    /// Generate batch rules
+    pub unsafe fn batch(
+        self,
+        cgcx: &CodegenContext<B>,
+        tcx: TyCtxt<'_>,
+        batch_fncs: Vec<BatchItem>,
+        config: &ModuleConfig,
+    ) -> Result<LtoModuleCodegen<B>, FatalError> {
+        match &self {
+            LtoModuleCodegen::Fat(module) => {
+                B::batch(cgcx, tcx, &module, batch_fncs, config)?;
+            }
+            _ => panic!("batch called with non-fat LTO module"),
         }
 
         Ok(self)

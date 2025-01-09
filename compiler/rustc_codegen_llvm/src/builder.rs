@@ -3,6 +3,7 @@ use std::ops::Deref;
 use std::{iter, ptr};
 
 pub(crate) mod autodiff;
+pub(crate) mod batching;
 
 use libc::{c_char, c_uint};
 use rustc_abi as abi;

@@ -504,6 +504,10 @@ mod llvm_enzyme {
                     // Nothing special to do here.
                     d_inputs.push(arg.clone());
                 }
+                BatchActivity::FakeActivitySize => {
+                    // We don't need to do anything here.
+                    d_inputs.push(arg.clone());
+                }
             }
             if let PatKind::Ident(_, ident, _) = arg.pat.kind {
                 idents.push(ident.clone());
@@ -547,7 +551,7 @@ mod batch_fallback {
         meta_item: &ast::MetaItem,
         item: Annotatable,
     ) -> Vec<Annotatable> {
-        ecx.sess.dcx().emit_err(errors::BatchSupportNotBuild { span: meta_item.span });
+        ecx.sess.dcx().emit_err(errors::BatchingSupportNotBuild { span: meta_item.span });
         return vec![item];
     }
 }

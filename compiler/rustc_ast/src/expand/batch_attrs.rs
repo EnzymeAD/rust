@@ -26,6 +26,8 @@ pub enum BatchActivity {
     Leaf,
     /// Just receive this argument N times.
     Vector,
+    /// Same as with autodiff
+    FakeActivitySize,
 }
 /// We generate one of these structs for each `#[autodiff(...)]` attribute.
 #[derive(Clone, Eq, PartialEq, Encodable, Decodable, Debug, HashStable_Generic)]
@@ -61,6 +63,7 @@ impl Display for BatchActivity {
             BatchActivity::Const => write!(f, "Const"),
             BatchActivity::Leaf => write!(f, "Leaf"),
             BatchActivity::Vector => write!(f, "Vector"),
+            BatchActivity::FakeActivitySize => write!(f, "FakeActivitySize"),
         }
     }
 }

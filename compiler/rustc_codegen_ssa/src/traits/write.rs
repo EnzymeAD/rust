@@ -1,4 +1,5 @@
 use rustc_ast::expand::autodiff_attrs::AutoDiffItem;
+use rustc_ast::expand::batch_attrs::BatchItem;
 use rustc_errors::{DiagCtxtHandle, FatalError};
 use rustc_middle::dep_graph::WorkProduct;
 use rustc_middle::ty::TyCtxt;
@@ -72,6 +73,14 @@ pub trait WriteBackendMethods: 'static + Sized + Clone {
         diff_fncs: Vec<AutoDiffItem>,
         config: &ModuleConfig,
     ) -> Result<(), FatalError>;
+    fn batch(
+        cgcx: &CodegenContext<Self>,
+        tcx: TyCtxt<'_>,
+        module: &ModuleCodegen<Self::Module>,
+        batch_fncs: Vec<BatchItem>,
+        config: &ModuleConfig,
+    ) -> Result<(), FatalError>;
+
 }
 
 pub trait ThinBufferMethods: Send + Sync {

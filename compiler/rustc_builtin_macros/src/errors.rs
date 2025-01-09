@@ -266,6 +266,19 @@ mod ad_fallback {
     }
 }
 
+#[cfg(not(llvm_enzyme))]
+pub(crate) use batch_fallback::*;
+#[cfg(not(llvm_enzyme))]
+mod batch_fallback {
+    use super::*;
+    #[derive(Diagnostic)]
+    #[diag(builtin_macros_batch_not_build)]
+    pub(crate) struct BatchingSupportNotBuild {
+        #[primary_span]
+        pub(crate) span: Span,
+    }
+}
+
 #[derive(Diagnostic)]
 #[diag(builtin_macros_concat_bytes_invalid)]
 pub(crate) struct ConcatBytesInvalid {

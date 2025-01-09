@@ -1,4 +1,5 @@
 codegen_llvm_autodiff_without_lto = using the autodiff feature requires using fat-lto
+codegen_llvm_batching_without_lto = using the batching feature requires using fat-lto
 
 codegen_llvm_copy_bitcode = failed to copy bitcode to object file: {$err}
 
@@ -51,6 +52,8 @@ codegen_llvm_parse_target_machine_config =
 
 codegen_llvm_prepare_autodiff = failed to prepare autodiff: src: {$src}, target: {$target}, {$error}
 codegen_llvm_prepare_autodiff_with_llvm_err = failed to prepare autodiff: {$llvm_err}, src: {$src}, target: {$target}, {$error}
+codegen_llvm_prepare_batching = failed to prepare batching: src: {$src}, target: {$target}, {$error}
+codegen_llvm_prepare_batching_with_llvm_err = failed to prepare batching: {$llvm_err}, src: {$src}, target: {$target}, {$error}
 codegen_llvm_prepare_thin_lto_context = failed to prepare thin LTO context
 codegen_llvm_prepare_thin_lto_context_with_llvm_err = failed to prepare thin LTO context: {$llvm_err}
 
