@@ -222,7 +222,10 @@ fn generate_enzyme_call<'ll>(
                     // A duplicated pointer will have the following two outer_fn arguments:
                     // (..., ptr, ptr, ...). We add the following llvm-ir to our __enzyme call:
                     // (..., metadata! enzyme_dup, ptr, ptr, ...).
-                    if matches!(diff_activity, DiffActivity::Duplicated | DiffActivity::DuplicatedOnly) {
+                    if matches!(
+                        diff_activity,
+                        DiffActivity::Duplicated | DiffActivity::DuplicatedOnly
+                    ) {
                         assert!(
                             llvm::LLVMRustGetTypeKind(next_outer_ty) == llvm::TypeKind::Pointer
                         );

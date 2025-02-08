@@ -550,23 +550,28 @@ pub(crate) unsafe fn llvm_optimize(
     let unroll_loops;
     let vectorize_slp;
     let vectorize_loop;
+    let run_enzyme;
 
-    let run_enzyme = cfg!(llvm_enzyme);
     // When we build rustc with enzyme/autodiff support, we want to postpone size-increasing
-    // optimizations until after differentiation. FIXME(ZuseZ4): Before shipping on nightly,
+    // optimizations until after differentiation. Our pipeline is thus: (opt + enzyme), (full opt).
+    // We therefore have two calls to llvm_optimize, if autodiff is used.
+    //
+    // FIXME(ZuseZ4): Before shipping on nightly,
     // we should make this more granular, or at least check that the user has at least one autodiff
     // call in their code, to justify altering the compilation pipeline.
-    if skip_size_increasing_opts && run_enzyme {
+    if skip_size_increasing_opts && cfg!(llvm_enzyme) {
         unroll_loops = false;
         vectorize_slp = false;
         vectorize_loop = false;
+        run_enzyme = true;
     } else {
         unroll_loops =
             opt_level != config::OptLevel::Size && opt_level != config::OptLevel::SizeMin;
         vectorize_slp = config.vectorize_slp;
         vectorize_loop = config.vectorize_loop;
+        run_enzyme = false;
     }
-    trace!(?unroll_loops, ?vectorize_slp, ?vectorize_loop);
+    trace!(?unroll_loops, ?vectorize_slp, ?vectorize_loop, ?run_enzyme);
     let using_thin_buffers = opt_stage == llvm::OptStage::PreLinkThinLTO || config.bitcode_needed();
     let pgo_gen_path = get_pgo_gen_path(config);
     let pgo_use_path = get_pgo_use_path(config);
