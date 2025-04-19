@@ -41,8 +41,13 @@ pub(crate) fn AddFunctionAttributes<'ll>(
     }
 }
 
-pub(crate) fn HasAttributeAtIndex<'ll>(llfn: &'ll Value, idx: u32, kind: AttributeKind) -> bool {
-    unsafe { LLVMRustHasAttributeAtIndex(llfn, idx, kind) }
+pub(crate) fn HasAttributeAtIndex<'ll>(llfn: &'ll Value, place: AttributePlace, kind: AttributeKind) -> bool {
+    unsafe { LLVMRustHasAttributeAtIndex(llfn, place.as_uint(), kind) }
+}
+pub(crate) fn RemoveStringAttributeAtIndex<'ll>(llfn: &Value, place: AttributePlace, attr: &'ll Attribute) {
+    unsafe {
+        LLVMRustRemoveFunctionAttribute(llfn, place.as_uint(), attr)
+    }
 }
 
 pub(crate) fn RemoveEnumAttributeAtIndex(llfn: &Value, place: AttributePlace, kind: AttributeKind) {

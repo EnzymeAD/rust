@@ -19,6 +19,13 @@ unsafe extern "C" {
     pub(crate) fn LLVMRustVerifyFunction(V: &Value, action: LLVMRustVerifierFailureAction) -> Bool;
     pub(crate) fn LLVMRustHasAttributeAtIndex(V: &Value, i: c_uint, Kind: AttributeKind) -> bool;
     pub(crate) fn LLVMRustGetArrayNumElements(Ty: &Type) -> u64;
+    pub(crate) fn LLVMRustHasFnAttribute(F: &Value, Name: *const c_char) -> bool;
+    pub(crate) fn LLVMRustRemoveFnAttribute(F: &Value, Name: *const c_char);
+    pub(crate) fn LLVMRustRemoveEnumAttributeAtIndex(
+        F: &Value,
+        i: c_uint,
+        Kind: AttributeKind,
+    );
 }
 
 unsafe extern "C" {

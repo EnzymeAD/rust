@@ -1880,6 +1880,11 @@ unsafe extern "C" {
         Attrs: *const &'a Attribute,
         AttrsLen: size_t,
     );
+    pub(crate) fn LLVMRustRemoveFunctionAttribute<'a>(
+        Fn: &'a Value,
+        index: c_uint,
+        Attrs: &'a Attribute,
+    );
 
     // Operations on call sites
     pub(crate) fn LLVMRustAddCallSiteAttributes<'a>(
@@ -2459,6 +2464,9 @@ unsafe extern "C" {
         DisableSimplifyLibCalls: bool,
         EmitLifetimeMarkers: bool,
         RunEnzyme: bool,
+        PrintBeforeEnzyme: bool,
+        PrintAfterEnzyme: bool,
+        PrintPasses: bool,
         SanitizerOptions: Option<&SanitizerOptions>,
         PGOGenPath: *const c_char,
         PGOUsePath: *const c_char,

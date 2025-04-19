@@ -958,6 +958,30 @@ extern "C" void LLVMRustEraseInstUntilInclusive(LLVMBasicBlockRef bb,
   It->eraseFromParent();
 }
 
+
+extern "C" void LLVMRustRemoveEnumAttributeAtIndex(LLVMValueRef F, size_t index,
+                                                   LLVMRustAttributeKind RustAttr) {
+  LLVMRemoveEnumAttributeAtIndex(F, index, fromRust(RustAttr));
+}
+
+extern "C" void LLVMRustRemoveFnAttribute(LLVMValueRef Fn, const char *Name) {
+  Function *F = unwrap<Function>(Fn);
+  assert(F);
+  assert(F->hasFnAttribute(Name) &&
+         "Function does not have the attribute to be removed");
+  F->removeFnAttr(Name);
+  //AttributeList PAL = F->getAttributes();
+  //PAL = PAL.removeParamAttribute(F->getContext(), Index, fromRust(RustAttr));
+  //F->setAttributes(PAL);
+}
+
+extern "C" bool LLVMRustHasFnAttribute(LLVMValueRef F, const char *Name) {
+  if (auto *Fn = dyn_cast<Function>(unwrap<Value>(F))) {
+    return Fn->hasFnAttribute(Name);
+  }
+  return false;
+}
+
 extern "C" bool LLVMRustHasMetadata(LLVMValueRef inst, unsigned kindID) {
   if (auto *I = dyn_cast<Instruction>(unwrap<Value>(inst))) {
     return I->hasMetadata(kindID);
